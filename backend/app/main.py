@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,43 +10,49 @@ from .config import DATABASE_URL, ALLOWED_ORIGINS
 from .routers import machines, telemetry, predictions, alerts, dashboard, ml_models
 from .ml_service import ml_engine
 
-# Ensure database schema and migrations are safely applied immediately on module load
-Base.metadata.create_all(bind=engine)
-ensure_schema_migrations(engine)
+logger = logging.getLogger("machineguard")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 1. Ensure database schema and migrations are safely applied
-    Base.metadata.create_all(bind=engine)
-    ensure_schema_migrations(engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+        ensure_schema_migrations(engine)
+        logger.info("Database schema and migrations verified.")
+    except Exception as e:
+        logger.warning(f"Database schema initialization deferred: {e}")
     
     # 2. Seed initial demo machines if not present
-    db = SessionLocal()
     try:
-        demo_machines = [
-            ("CNC-001", "Simulated CNC Milling Machine", "CNC Mill", "Bay 1 - Precision Milling Cell", "3-axis precision milling machine instrumented with AI4I physical telemetry sensors.", "M"),
-            ("CNC-101", "Vertical CNC Milling Center 1", "CNC Mill", "Bay A - Precision Machining Cell", "5-axis vertical machining center for titanium aerostructure components.", "M"),
-            ("PUMP-201", "High-Pressure Centrifugal Pump A", "Centrifugal Pump", "Utility Plant - Cooling Loop 2", "Variable-speed cooling fluid circulation pump rated for 350 GPM.", "L"),
-            ("PRESS-301", "Hydraulic Stamping Press 300T", "Hydraulic Press", "Stamping Line 3", "Heavy duty 300-ton hydraulic sheet metal forming press.", "H"),
-            ("COMP-401", "Rotary Screw Air Compressor B", "Air Compressor", "Compressor House 1", "Primary pneumatic supply rotary compressor operating at 7.5 bar nominal.", "M")
-        ]
-        for mid, name, mtype, loc, desc, tvar in demo_machines:
-            existing = db.query(Machine).filter(Machine.machine_id == mid).first()
-            if not existing:
-                db.add(Machine(
-                    machine_id=mid,
-                    name=name,
-                    machine_type=mtype,
-                    location=loc,
-                    description=desc,
-                    type_variant=tvar
-                ))
-            else:
-                if not getattr(existing, "type_variant", None):
-                    existing.type_variant = tvar
-        db.commit()
-    finally:
-        db.close()
+        db = SessionLocal()
+        try:
+            demo_machines = [
+                ("CNC-001", "Simulated CNC Milling Machine", "CNC Mill", "Bay 1 - Precision Milling Cell", "3-axis precision milling machine instrumented with AI4I physical telemetry sensors.", "M"),
+                ("CNC-101", "Vertical CNC Milling Center 1", "CNC Mill", "Bay A - Precision Machining Cell", "5-axis vertical machining center for titanium aerostructure components.", "M"),
+                ("PUMP-201", "High-Pressure Centrifugal Pump A", "Centrifugal Pump", "Utility Plant - Cooling Loop 2", "Variable-speed cooling fluid circulation pump rated for 350 GPM.", "L"),
+                ("PRESS-301", "Hydraulic Stamping Press 300T", "Hydraulic Press", "Stamping Line 3", "Heavy duty 300-ton hydraulic sheet metal forming press.", "H"),
+                ("COMP-401", "Rotary Screw Air Compressor B", "Air Compressor", "Compressor House 1", "Primary pneumatic supply rotary compressor operating at 7.5 bar nominal.", "M")
+            ]
+            for mid, name, mtype, loc, desc, tvar in demo_machines:
+                existing = db.query(Machine).filter(Machine.machine_id == mid).first()
+                if not existing:
+                    db.add(Machine(
+                        machine_id=mid,
+                        name=name,
+                        machine_type=mtype,
+                        location=loc,
+                        description=desc,
+                        type_variant=tvar
+                    ))
+                else:
+                    if not getattr(existing, "type_variant", None):
+                        existing.type_variant = tvar
+            db.commit()
+            logger.info("Demo machinery fleet verified.")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"Initial machine seeding deferred: {e}")
 
     # 3. Ensure ML models are loaded and ready for inference
     _ = ml_engine
