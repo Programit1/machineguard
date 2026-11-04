@@ -210,7 +210,59 @@ export async function fetchMachineDetail(machineId) {
         .eq('machine_id', machineId)
         .single();
       if (error) throw error;
-      return data;
+
+      // Concurrently fetch latest reading, latest prediction, and active alerts
+      const [rRes, pRes, aRes] = await Promise.allSettled([
+        supabase
+          .from('sensor_readings')
+          .select('*')
+          .eq('machine_id', machineId)
+          .order('timestamp', { ascending: false })
+          .limit(1),
+        supabase
+          .from('predictions')
+          .select('*')
+          .eq('machine_id', machineId)
+          .order('timestamp', { ascending: false })
+          .limit(1),
+        supabase
+          .from('alerts')
+          .select('*', { count: 'exact', head: true })
+          .eq('machine_id', machineId)
+          .ilike('status', 'active'),
+      ]);
+
+      const latestReading = (rRes.status === 'fulfilled' && rRes.value?.data?.[0]) || null;
+      const latestPred = (pRes.status === 'fulfilled' && pRes.value?.data?.[0]) || null;
+      const activeAlertsCount = (aRes.status === 'fulfilled' && aRes.value?.count) || 0;
+
+      const now = Date.now();
+      const isOnline = Boolean(
+        latestReading && (now - new Date(latestReading.timestamp).getTime() <= 45000)
+      );
+
+      let health_status = 'Healthy';
+      if (!latestPred) {
+        health_status = 'No Data';
+      } else if (latestPred.risk_category === 'Critical') {
+        health_status = 'Critical Risk';
+      } else if (latestPred.risk_category === 'High') {
+        health_status = 'High Risk';
+      } else if (latestPred.risk_category === 'Medium') {
+        health_status = 'Attention Required';
+      }
+
+      return {
+        ...data,
+        id: data.machine_id,
+        is_online: isOnline,
+        status: isOnline ? 'ONLINE' : 'OFFLINE',
+        last_telemetry_time: latestReading ? latestReading.timestamp : null,
+        latest_reading: latestReading,
+        latest_prediction: latestPred,
+        health_status,
+        active_alerts_count: activeAlertsCount,
+      };
     } catch (err) {
       console.warn('Supabase fetchMachineDetail fallback to API:', err);
     }
@@ -319,7 +371,8 @@ export async function fetchMachineTelemetry(machineId, limit = 60) {
 
   const res = await fetch(`${API_BASE}/machines/${encodeURIComponent(machineId)}/telemetry?limit=${limit}`);
   if (!res.ok) throw new Error(`Failed to load telemetry: ${res.statusText}`);
-  return res.json();
+  const items = await res.json();
+  return Array.isArray(items) ? [...items].reverse() : [];
 }
 
 export async function fetchMachinePredictions(machineId, limit = 30) {

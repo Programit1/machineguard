@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Component } from 'react';
 import {
   ArrowLeft,
   Clock,
@@ -39,16 +39,28 @@ import {
 
 function formatLocalTime(ts) {
   if (!ts) return 'Awaiting telemetry';
-  const str = String(ts);
-  const iso = (!str.endsWith('Z') && !str.includes('+')) ? `${str}Z` : str;
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  try {
+    const str = String(ts);
+    const iso = !str.endsWith('Z') && !str.includes('+') ? `${str}Z` : str;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return String(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch (e) {
+    return String(ts);
+  }
 }
 
 function formatChartTime(ts) {
   if (!ts) return '';
-  const str = String(ts);
-  const iso = (!str.endsWith('Z') && !str.includes('+')) ? `${str}Z` : str;
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  try {
+    const str = String(ts);
+    const iso = !str.endsWith('Z') && !str.includes('+') ? `${str}Z` : str;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch (e) {
+    return '';
+  }
 }
 
 const DEFAULT_FLEET_METADATA = {
@@ -56,7 +68,8 @@ const DEFAULT_FLEET_METADATA = {
   'CNC-101': { name: 'Vertical CNC Milling Center 1', machine_type: 'CNC Mill', type_variant: 'M', location: 'Bay A - Precision Machining Cell', description: '5-axis vertical machining center for titanium aerostructure components.' },
   'PUMP-201': { name: 'High-Pressure Centrifugal Pump A', machine_type: 'Centrifugal Pump', type_variant: 'L', location: 'Utility Plant - Cooling Loop 2', description: 'Variable-speed cooling fluid circulation pump rated for 350 GPM.' },
   'PRESS-301': { name: 'Hydraulic Stamping Press 300T', machine_type: 'Hydraulic Press', type_variant: 'H', location: 'Stamping Line 3', description: 'Heavy duty 300-ton hydraulic sheet metal forming press.' },
-  'COMP-401': { name: 'Rotary Screw Air Compressor B', machine_type: 'Air Compressor', type_variant: 'M', location: 'Compressor House 1', description: 'Primary pneumatic supply rotary compressor operating at 7.5 bar nominal.' }
+  'COMP-401': { name: 'Rotary Screw Air Compressor B', machine_type: 'Air Compressor', type_variant: 'M', location: 'Compressor House 1', description: 'Primary pneumatic supply rotary compressor operating at 7.5 bar nominal.' },
+  'ROBOT-501': { name: '6-Axis Articulated Welding Robot', machine_type: 'Robotic Arm', type_variant: 'L', location: 'Assembly Cell 4', description: 'High-precision robotic welding arm equipped with load torque feedback.' }
 };
 
 function getFallbackMachine(mid) {
@@ -84,7 +97,60 @@ function getFallbackMachine(mid) {
   };
 }
 
-export default function MachineDetail({ machineId, initialMachine, onBack }) {
+class MachineErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('MachineDetail rendering error caught by boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 max-w-xl mx-auto my-12">
+          <div className="rounded-xl border border-rose-200 bg-white p-6 shadow-sm text-center space-y-4">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-100 text-rose-600">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Machine Telemetry Display Notice</h3>
+              <p className="mt-1 text-xs text-slate-600">
+                A rendering issue occurred while parsing machine diagnostics ({this.props.machineId || 'Unknown'}).
+              </p>
+              <p className="mt-2 text-[11px] font-mono bg-slate-50 p-2 rounded border border-slate-200 text-rose-700 text-left overflow-x-auto">
+                {this.state.error?.message || 'Unknown error'}
+              </p>
+            </div>
+            <div className="flex justify-center gap-3 pt-2">
+              <button
+                onClick={() => this.setState({ hasError: false, error: null })}
+                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition-colors"
+              >
+                Retry
+              </button>
+              <button
+                onClick={this.props.onBack}
+                className="rounded-md bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition-colors"
+              >
+                Return to Fleet
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function MachineDetailContent({ machineId, initialMachine, onBack }) {
   const [machine, setMachine] = useState(() => initialMachine || getFallbackMachine(machineId));
   const [telemetry, setTelemetry] = useState([]);
   const [predictions, setPredictions] = useState([]);
@@ -98,7 +164,7 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
     if (initialMachine) {
       setMachine(initialMachine);
     } else if (machineId) {
-      setMachine((prev) => prev?.machine_id === machineId ? prev : getFallbackMachine(machineId));
+      setMachine((prev) => (prev?.machine_id === machineId ? prev : getFallbackMachine(machineId)));
     }
   }, [initialMachine, machineId]);
 
@@ -114,14 +180,43 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
       ]);
 
       if (mRes.status === 'fulfilled' && mRes.value) {
-        setMachine(mRes.value);
+        setMachine((prev) => ({
+          ...prev,
+          ...mRes.value,
+          latest_reading: mRes.value.latest_reading || prev?.latest_reading || null,
+          latest_prediction: mRes.value.latest_prediction || prev?.latest_prediction || null,
+        }));
       }
+
       if (tRes.status === 'fulfilled' && Array.isArray(tRes.value)) {
-        setTelemetry([...tRes.value].reverse()); // Chronological for charts
+        setTelemetry(tRes.value);
+        if (tRes.value.length > 0) {
+          const newestTelemetry = tRes.value[tRes.value.length - 1];
+          setMachine((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              latest_reading: prev.latest_reading || newestTelemetry,
+              last_telemetry_time: prev.last_telemetry_time || newestTelemetry.timestamp,
+            };
+          });
+        }
       }
+
       if (pRes.status === 'fulfilled' && Array.isArray(pRes.value)) {
         setPredictions(pRes.value);
+        if (pRes.value.length > 0) {
+          const newestPred = pRes.value[0];
+          setMachine((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              latest_prediction: prev.latest_prediction || newestPred,
+            };
+          });
+        }
       }
+
       if (aRes.status === 'fulfilled' && Array.isArray(aRes.value)) {
         setAlerts(aRes.value);
       }
@@ -189,15 +284,21 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
     );
   }
 
-  const latestReading = machine.latest_reading;
-  const latestPred = machine.latest_prediction;
+  const latestReading = machine?.latest_reading || (telemetry.length > 0 ? telemetry[telemetry.length - 1] : null);
+  const latestPred = machine?.latest_prediction || (predictions.length > 0 ? predictions[0] : null);
 
   // Probability formatting: backend decimal in [0.0, 1.0] -> % for display
-  const rawProb = latestPred?.failure_probability !== null && latestPred?.failure_probability !== undefined
-    ? latestPred.failure_probability
-    : null;
-  const failurePct = rawProb !== null ? (rawProb <= 1.0 ? rawProb * 100.0 : rawProb) : 0.0;
-  const riskCat = latestPred ? latestPred.risk_category : 'Low';
+  const rawProb =
+    latestPred?.failure_probability !== null && latestPred?.failure_probability !== undefined
+      ? latestPred.failure_probability
+      : null;
+  const failurePct =
+    typeof rawProb === 'number' && !isNaN(rawProb)
+      ? rawProb <= 1.0
+        ? rawProb * 100.0
+        : rawProb
+      : 0.0;
+  const riskCat = latestPred?.risk_category || 'Low';
 
   // Anomaly status
   const isAnomaly = Boolean(latestPred?.anomaly || latestPred?.anomaly_detected);
@@ -210,24 +311,33 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
   const rulAvailable = Boolean(latestPred?.rul_available);
 
   // Health status
-  const healthStatus = latestPred?.machine_health_status || machine.health_status || 'Healthy';
+  const healthStatus = latestPred?.machine_health_status || machine?.health_status || 'Healthy';
   const hasDisagreement = Boolean(latestPred?.model_disagreement);
   const disagreementReason = latestPred?.disagreement_reason;
 
   // Active alerts for this machine
-  const activeAlerts = alerts.filter(a => a.status?.toUpperCase() === 'ACTIVE');
+  const activeAlerts = alerts.filter((a) => a && a.status && a.status.toUpperCase() === 'ACTIVE');
 
-  // Format telemetry chart records
-  const chartData = telemetry.map((t) => ({
-    time: formatChartTime(t.timestamp),
-    speed: t.rotational_speed,
-    torque: t.torque,
-    wear: t.tool_wear,
-    air_temp_c: t.air_temperature ? parseFloat((t.air_temperature - 273.15).toFixed(1)) : null,
-    proc_temp_c: t.temperature !== null ? t.temperature : (t.process_temperature ? parseFloat((t.process_temperature - 273.15).toFixed(1)) : null),
-    vibration: t.vibration,
-    pressure: t.pressure,
-  }));
+  // Format telemetry chart records safely
+  const chartData = telemetry.map((t) => {
+    const airK = typeof t?.air_temperature === 'number' ? t.air_temperature : null;
+    const procK = typeof t?.process_temperature === 'number' ? t.process_temperature : null;
+    const directTemp = typeof t?.temperature === 'number' ? t.temperature : null;
+
+    const airC = airK !== null ? parseFloat((airK - 273.15).toFixed(1)) : null;
+    const procC = directTemp !== null ? directTemp : procK !== null ? parseFloat((procK - 273.15).toFixed(1)) : null;
+
+    return {
+      time: formatChartTime(t?.timestamp),
+      speed: typeof t?.rotational_speed === 'number' ? t.rotational_speed : null,
+      torque: typeof t?.torque === 'number' ? t.torque : null,
+      wear: typeof t?.tool_wear === 'number' ? t.tool_wear : null,
+      air_temp_c: airC,
+      proc_temp_c: procC,
+      vibration: typeof t?.vibration === 'number' ? t.vibration : null,
+      pressure: typeof t?.pressure === 'number' ? t.pressure : null,
+    };
+  });
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -246,7 +356,7 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
               <span className="font-mono text-xs font-bold bg-slate-900 text-white px-2 py-0.5 rounded">
                 {machine.machine_id}
               </span>
-              <StatusBadge isOnline={machine.is_online} health={healthStatus} />
+              <StatusBadge isOnline={Boolean(machine.is_online)} health={healthStatus} />
               <span className="text-xs font-medium text-slate-500">
                 {machine.type_variant ? `Variant ${machine.type_variant}` : 'Standard Variant'}
               </span>
@@ -278,7 +388,9 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold ${
                   healthStatus === 'Critical Risk' || healthStatus === 'Critical'
                     ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                    : healthStatus === 'Attention Required' || healthStatus === 'Warning' || healthStatus.includes('Warning')
+                    : healthStatus === 'Attention Required' ||
+                      healthStatus === 'Warning' ||
+                      healthStatus.includes('Warning')
                     ? 'bg-amber-100 text-amber-800 border border-amber-200'
                     : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                 }`}
@@ -298,7 +410,8 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
             <div>
               <h4 className="text-sm font-bold text-amber-900">Model Consensus Notice</h4>
               <p className="mt-0.5 text-xs text-amber-800 leading-relaxed">
-                {disagreementReason || 'Failure Classifier and Isolation Forest diverge on current operational dynamics. Machine flagged for review.'}
+                {disagreementReason ||
+                  'Failure Classifier and Isolation Forest diverge on current operational dynamics. Machine flagged for review.'}
               </p>
             </div>
           </div>
@@ -320,12 +433,16 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
             <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
               <div className="text-[11px] text-slate-500 font-medium">Air Temp</div>
               <div className="mt-1 text-lg font-bold font-mono text-slate-900">
-                {latestReading.air_temperature
+                {typeof latestReading?.air_temperature === 'number'
                   ? `${(latestReading.air_temperature - 273.15).toFixed(1)}°C`
+                  : typeof latestReading?.temperature === 'number'
+                  ? `${latestReading.temperature.toFixed(1)}°C`
                   : '—'}
               </div>
               <div className="text-[10px] text-slate-400 font-mono">
-                {latestReading.air_temperature ? `${latestReading.air_temperature.toFixed(1)} K` : 'Ambient'}
+                {typeof latestReading?.air_temperature === 'number'
+                  ? `${latestReading.air_temperature.toFixed(1)} K`
+                  : 'Ambient'}
               </div>
             </div>
 
@@ -333,14 +450,16 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
             <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
               <div className="text-[11px] text-slate-500 font-medium">Process Temp</div>
               <div className="mt-1 text-lg font-bold font-mono text-slate-900">
-                {latestReading.temperature !== null
-                  ? `${latestReading.temperature.toFixed(1)}°C`
-                  : latestReading.process_temperature
+                {typeof latestReading?.process_temperature === 'number'
                   ? `${(latestReading.process_temperature - 273.15).toFixed(1)}°C`
+                  : typeof latestReading?.temperature === 'number'
+                  ? `${latestReading.temperature.toFixed(1)}°C`
                   : '—'}
               </div>
               <div className="text-[10px] text-slate-400 font-mono">
-                {latestReading.process_temperature ? `${latestReading.process_temperature.toFixed(1)} K` : 'Internal'}
+                {typeof latestReading?.process_temperature === 'number'
+                  ? `${latestReading.process_temperature.toFixed(1)} K`
+                  : 'Internal'}
               </div>
             </div>
 
@@ -348,7 +467,9 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
             <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
               <div className="text-[11px] text-slate-500 font-medium">Spindle Speed</div>
               <div className="mt-1 text-lg font-bold font-mono text-slate-900">
-                {latestReading.rotational_speed !== null ? `${Math.round(latestReading.rotational_speed)}` : '—'}
+                {typeof latestReading?.rotational_speed === 'number'
+                  ? `${Math.round(latestReading.rotational_speed)}`
+                  : '—'}
               </div>
               <div className="text-[10px] text-slate-400">rpm (1300–1800)</div>
             </div>
@@ -357,7 +478,7 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
             <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
               <div className="text-[11px] text-slate-500 font-medium">Drive Torque</div>
               <div className="mt-1 text-lg font-bold font-mono text-slate-900">
-                {latestReading.torque !== null ? `${latestReading.torque.toFixed(1)}` : '—'}
+                {typeof latestReading?.torque === 'number' ? `${latestReading.torque.toFixed(1)}` : '—'}
               </div>
               <div className="text-[10px] text-slate-400">Nm (Nominal 25–55)</div>
             </div>
@@ -366,7 +487,7 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
             <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
               <div className="text-[11px] text-slate-500 font-medium">Tool Wear</div>
               <div className="mt-1 text-lg font-bold font-mono text-slate-900">
-                {latestReading.tool_wear !== null ? `${Math.round(latestReading.tool_wear)}` : '—'}
+                {typeof latestReading?.tool_wear === 'number' ? `${Math.round(latestReading.tool_wear)}` : '—'}
               </div>
               <div className="text-[10px] text-slate-400">min (Limit: 240)</div>
             </div>
@@ -375,7 +496,7 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
             <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
               <div className="text-[11px] text-slate-500 font-medium">Vibration</div>
               <div className="mt-1 text-lg font-bold font-mono text-slate-900">
-                {latestReading.vibration !== null ? `${latestReading.vibration.toFixed(2)}` : '—'}
+                {typeof latestReading?.vibration === 'number' ? `${latestReading.vibration.toFixed(2)}` : '—'}
               </div>
               <div className="text-[10px] text-slate-400">mm/s (&lt; 5.0)</div>
             </div>
@@ -384,7 +505,7 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
             <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
               <div className="text-[11px] text-slate-500 font-medium">Line Pressure</div>
               <div className="mt-1 text-lg font-bold font-mono text-slate-900">
-                {latestReading.pressure !== null ? `${latestReading.pressure.toFixed(1)}` : '—'}
+                {typeof latestReading?.pressure === 'number' ? `${latestReading.pressure.toFixed(1)}` : '—'}
               </div>
               <div className="text-[10px] text-slate-400">bar</div>
             </div>
@@ -396,7 +517,7 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
         )}
       </div>
 
-      {/* 3. Three Separate ML Prediction Sections (NEVER merged into one) */}
+      {/* 3. Three Separate ML Prediction Sections */}
       <div>
         <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
           Predictive Maintenance AI Diagnoses
@@ -426,9 +547,13 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
               {/* Plain-Language Explanation */}
               <div className="mt-3 p-3 rounded-lg bg-slate-50 border border-slate-200/80 space-y-1.5">
                 <div className="text-[11px] font-bold text-slate-800">
-                  {riskCat === 'Critical' ? 'Critical Failure Probability' :
-                   riskCat === 'High' ? 'Elevated Failure Risk' :
-                   riskCat === 'Medium' ? 'Moderate Parameter Drift' : 'Nominal Operational Dynamics'}
+                  {riskCat === 'Critical'
+                    ? 'Critical Failure Probability'
+                    : riskCat === 'High'
+                    ? 'Elevated Failure Risk'
+                    : riskCat === 'Medium'
+                    ? 'Moderate Parameter Drift'
+                    : 'Nominal Operational Dynamics'}
                 </div>
                 <p className="text-xs text-slate-600 leading-relaxed">
                   {latestPred?.contributing_factors && latestPred.contributing_factors.length > 0
@@ -455,7 +580,9 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
                 </div>
                 <div className="flex justify-between">
                   <span>Raw Decimal Probability:</span>
-                  <span className="font-bold text-slate-800">{rawProb !== null ? rawProb.toFixed(5) : '0.00000'}</span>
+                  <span className="font-bold text-slate-800">
+                    {typeof rawProb === 'number' && !isNaN(rawProb) ? rawProb.toFixed(5) : '0.00000'}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Classification Threshold:</span>
@@ -505,29 +632,43 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
                 </div>
                 <p className="text-xs text-slate-600 leading-relaxed">
                   {isAnomaly ? (
-                    latestReading?.vibration > 5.0 ? (
-                      <>Vibration is <span className="font-mono font-bold text-rose-700">{latestReading.vibration.toFixed(2)} mm/s</span>, exceeding configured ISO limit of 5.0 mm/s (normal range: 0.5–5.0 mm/s).</>
-                    ) : latestReading?.torque > 60.0 ? (
-                      <>Drive torque is <span className="font-mono font-bold text-amber-700">{latestReading.torque.toFixed(1)} Nm</span>, exceeding normal rated torque of 55 Nm (normal range: 25–55 Nm).</>
+                    typeof latestReading?.vibration === 'number' && latestReading.vibration > 5.0 ? (
+                      <>
+                        Vibration is{' '}
+                        <span className="font-mono font-bold text-rose-700">
+                          {latestReading.vibration.toFixed(2)} mm/s
+                        </span>
+                        , exceeding configured ISO limit of 5.0 mm/s (normal range: 0.5–5.0 mm/s).
+                      </>
+                    ) : typeof latestReading?.torque === 'number' && latestReading.torque > 60.0 ? (
+                      <>
+                        Drive torque is{' '}
+                        <span className="font-mono font-bold text-amber-700">
+                          {latestReading.torque.toFixed(1)} Nm
+                        </span>
+                        , exceeding normal rated torque of 55 Nm (normal range: 25–55 Nm).
+                      </>
                     ) : (
                       <>Atypical operational parameter correlation detected outside standard multidimensional cluster dynamics.</>
                     )
                   ) : (
-                    'Sensor readings are within the model\'s expected multidimensional operating pattern.'
+                    "Sensor readings are within the model's expected multidimensional operating pattern."
                   )}
                 </p>
                 <div className="pt-1 text-[11px] text-slate-700 font-medium">
                   <span className="font-semibold text-slate-900">Recommended action:</span>{' '}
                   {isAnomaly ? (
-                    latestReading?.vibration > 5.0 ? 'Inspect spindle bearings, mechanical balance, and mounting bolts.' :
-                    latestReading?.torque > 60.0 ? 'Inspect workpiece feed rate and spindle drive motor.' :
-                    'Inspect operating load and verify sensor calibration.'
+                    typeof latestReading?.vibration === 'number' && latestReading.vibration > 5.0
+                      ? 'Inspect spindle bearings, mechanical balance, and mounting bolts.'
+                      : typeof latestReading?.torque === 'number' && latestReading.torque > 60.0
+                      ? 'Inspect workpiece feed rate and spindle drive motor.'
+                      : 'Inspect operating load and verify sensor calibration.'
                   ) : (
                     'Continue standard preventative inspection schedule.'
                   )}
                 </div>
 
-                {/* Educational Notice Distinguishing Anomaly from Failure */}
+                {/* Educational Notice */}
                 <div className="mt-1 pt-1.5 border-t border-slate-200/70 text-[10px] text-slate-500 leading-tight">
                   <span className="font-semibold text-slate-700">Notice:</span> Anomaly detection identifies unusual multi-parameter sensor behaviour and statistical outliers; it is distinct from mechanical failure probability.
                 </div>
@@ -547,7 +688,13 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
                 </div>
                 <div className="flex justify-between">
                   <span>Raw Decision Score:</span>
-                  <span className="font-bold text-slate-800">{anomScore !== null && anomScore !== undefined ? (anomScore > 0 ? `+${anomScore.toFixed(4)}` : anomScore.toFixed(4)) : 'N/A'}</span>
+                  <span className="font-bold text-slate-800">
+                    {typeof anomScore === 'number' && !isNaN(anomScore)
+                      ? anomScore > 0
+                        ? `+${anomScore.toFixed(4)}`
+                        : anomScore.toFixed(4)
+                      : 'N/A'}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Decision Boundary:</span>
@@ -574,12 +721,14 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
               <div className="mt-3 flex items-baseline justify-between">
                 <div>
                   <div className="text-2xl font-bold font-mono text-slate-900">
-                    {rulCycles !== null && rulCycles !== undefined
+                    {typeof rulCycles === 'number' && !isNaN(rulCycles)
                       ? `${Math.round(rulCycles)}`
                       : 'Unavailable'}
                   </div>
                   <div className="text-[11px] text-slate-500">
-                    {rulCycles !== null && rulCycles !== undefined ? `Remaining ${rulUnit}` : 'RUL Estimation'}
+                    {typeof rulCycles === 'number' && !isNaN(rulCycles)
+                      ? `Remaining ${rulUnit}`
+                      : 'RUL Estimation'}
                   </div>
                 </div>
 
@@ -597,20 +746,24 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
               {/* Plain-Language Explanation */}
               <div className="mt-3 p-3 rounded-lg bg-slate-50 border border-slate-200/80 space-y-1.5">
                 <div className="text-[11px] font-bold text-slate-800">
-                  {rulCycles !== null && rulCycles !== undefined
+                  {typeof rulCycles === 'number' && !isNaN(rulCycles)
                     ? 'Tooling Life Cycle Estimation'
                     : 'Model Not Applicable'}
                 </div>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  {rulCycles !== null && rulCycles !== undefined ? (
-                    <>Estimated <span className="font-mono font-bold text-slate-900">{Math.round(rulCycles)}</span> production cycles remaining before cutting tool degradation reaches the critical 240-minute replacement limit.</>
+                  {typeof rulCycles === 'number' && !isNaN(rulCycles) ? (
+                    <>
+                      Estimated{' '}
+                      <span className="font-mono font-bold text-slate-900">{Math.round(rulCycles)}</span>{' '}
+                      production cycles remaining before cutting tool degradation reaches the critical 240-minute replacement limit.
+                    </>
                   ) : (
                     'Unavailable: Tooling telemetry channels are not instrumented for this equipment type or tool wear sensor channel is inactive.'
                   )}
                 </p>
                 <div className="pt-1 text-[11px] text-slate-700 font-medium">
                   <span className="font-semibold text-slate-900">Recommended action:</span>{' '}
-                  {rulCycles !== null && rulCycles < 50
+                  {typeof rulCycles === 'number' && rulCycles < 50
                     ? 'Schedule immediate cutting insert changeout before next production batch.'
                     : 'Continue standard operations; re-evaluate tool wear on shift transition.'}
                 </div>
@@ -665,7 +818,7 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
 
           <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
             <div className="text-[11px] font-semibold text-slate-500 uppercase">Triggering Values</div>
-            <div className="mt-1 font-mono text-xs text-slate-800">
+            <div className="mt-1 font-mono text-xs text-slate-800 overflow-x-auto">
               {activeAlerts.length > 0 && activeAlerts[0].triggering_values
                 ? JSON.stringify(activeAlerts[0].triggering_values)
                 : 'All parameters within rated limits'}
@@ -684,15 +837,22 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
             <div className="mt-1">
               <span
                 className={`inline-flex px-2 py-0.5 rounded text-xs font-bold ${
-                  riskCat === 'Critical' ? 'bg-rose-100 text-rose-800' :
-                  riskCat === 'High' ? 'bg-orange-100 text-orange-800' :
-                  riskCat === 'Medium' ? 'bg-amber-100 text-amber-800' :
-                  'bg-emerald-100 text-emerald-800'
+                  riskCat === 'Critical'
+                    ? 'bg-rose-100 text-rose-800'
+                    : riskCat === 'High'
+                    ? 'bg-orange-100 text-orange-800'
+                    : riskCat === 'Medium'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-emerald-100 text-emerald-800'
                 }`}
               >
-                {riskCat === 'Critical' ? 'Immediate Shutdown' :
-                 riskCat === 'High' ? 'Inspect Within 24h' :
-                 riskCat === 'Medium' ? 'Monitor Next Shift' : 'Routine'}
+                {riskCat === 'Critical'
+                  ? 'Immediate Shutdown'
+                  : riskCat === 'High'
+                  ? 'Inspect Within 24h'
+                  : riskCat === 'Medium'
+                  ? 'Monitor Next Shift'
+                  : 'Routine'}
               </span>
             </div>
           </div>
@@ -706,9 +866,7 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight">
               Telemetry Time-Series Trends
             </h2>
-            <p className="text-xs text-slate-500">
-              Real-time multi-channel sensor telemetry history
-            </p>
+            <p className="text-xs text-slate-500">Real-time multi-channel sensor telemetry history</p>
           </div>
 
           {/* Chart View Switcher */}
@@ -766,23 +924,72 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
 
                 {activeChartTab === 'mechanical' && (
                   <>
-                    <Line type="monotone" dataKey="speed" name="Rotational Speed (rpm)" stroke="#2563eb" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="torque" name="Torque (Nm)" stroke="#d97706" strokeWidth={2} dot={false} />
+                    <Line
+                      type="monotone"
+                      dataKey="speed"
+                      name="Rotational Speed (rpm)"
+                      stroke="#2563eb"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="torque"
+                      name="Torque (Nm)"
+                      stroke="#d97706"
+                      strokeWidth={2}
+                      dot={false}
+                    />
                   </>
                 )}
 
                 {activeChartTab === 'thermal' && (
                   <>
-                    <Line type="monotone" dataKey="proc_temp_c" name="Process Temp (°C)" stroke="#dc2626" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="air_temp_c" name="Air Temp (°C)" stroke="#059669" strokeWidth={2} dot={false} />
+                    <Line
+                      type="monotone"
+                      dataKey="proc_temp_c"
+                      name="Process Temp (°C)"
+                      stroke="#dc2626"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="air_temp_c"
+                      name="Air Temp (°C)"
+                      stroke="#059669"
+                      strokeWidth={2}
+                      dot={false}
+                    />
                   </>
                 )}
 
                 {activeChartTab === 'condition' && (
                   <>
-                    <Line type="monotone" dataKey="wear" name="Tool Wear (min)" stroke="#7c3aed" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="vibration" name="Vibration (mm/s)" stroke="#ea580c" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="pressure" name="Pressure (bar)" stroke="#0284c7" strokeWidth={2} dot={false} />
+                    <Line
+                      type="monotone"
+                      dataKey="wear"
+                      name="Tool Wear (min)"
+                      stroke="#7c3aed"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="vibration"
+                      name="Vibration (mm/s)"
+                      stroke="#ea580c"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="pressure"
+                      name="Pressure (bar)"
+                      stroke="#0284c7"
+                      strokeWidth={2}
+                      dot={false}
+                    />
                   </>
                 )}
               </LineChart>
@@ -818,23 +1025,24 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-mono">
-              {predictions.map((p) => {
-                const pProb = p.failure_probability !== null && p.failure_probability !== undefined
-                  ? (p.failure_probability <= 1.0 ? p.failure_probability * 100.0 : p.failure_probability)
-                  : null;
-                const pAnomaly = Boolean(p.anomaly_detected || p.anomaly);
-                const pHealth = p.machine_health_status || 'Healthy';
+              {predictions.map((p, idx) => {
+                const pProb =
+                  typeof p?.failure_probability === 'number'
+                    ? p.failure_probability <= 1.0
+                      ? p.failure_probability * 100.0
+                      : p.failure_probability
+                    : null;
+                const pAnomaly = Boolean(p?.anomaly_detected || p?.anomaly);
+                const pHealth = p?.machine_health_status || 'Healthy';
 
                 return (
-                  <tr key={p.id} className="hover:bg-slate-50/80">
-                    <td className="py-2 px-3 text-slate-500">
-                      {formatLocalTime(p.timestamp)}
-                    </td>
+                  <tr key={p?.id || p?.prediction_id || idx} className="hover:bg-slate-50/80">
+                    <td className="py-2 px-3 text-slate-500">{formatLocalTime(p?.timestamp)}</td>
                     <td className="py-2 px-3 font-bold text-slate-900">
                       {pProb !== null ? `${pProb.toFixed(1)}%` : 'N/A'}
                     </td>
                     <td className="py-2 px-3 font-sans">
-                      <RiskBadge category={p.risk_category} size="sm" />
+                      <RiskBadge category={p?.risk_category || 'Low'} size="sm" />
                     </td>
                     <td className="py-2 px-3 font-sans">
                       <span
@@ -842,16 +1050,18 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
                           pAnomaly ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
                         }`}
                       >
-                        {p.anomaly_label || (pAnomaly ? 'Anomaly' : 'Normal')}
+                        {p?.anomaly_label || (pAnomaly ? 'Anomaly' : 'Normal')}
                       </span>
                     </td>
                     <td className="py-2 px-3 text-slate-600">
-                      {p.anomaly_score !== null && p.anomaly_score !== undefined
-                        ? (p.anomaly_score > 0 ? `+${p.anomaly_score.toFixed(3)}` : p.anomaly_score.toFixed(3))
+                      {typeof p?.anomaly_score === 'number'
+                        ? p.anomaly_score > 0
+                          ? `+${p.anomaly_score.toFixed(3)}`
+                          : p.anomaly_score.toFixed(3)
                         : '—'}
                     </td>
                     <td className="py-2 px-3 text-slate-900 font-bold">
-                      {p.estimated_remaining_cuts !== null && p.estimated_remaining_cuts !== undefined
+                      {typeof p?.estimated_remaining_cuts === 'number'
                         ? Math.round(p.estimated_remaining_cuts)
                         : '—'}
                     </td>
@@ -876,5 +1086,13 @@ export default function MachineDetail({ machineId, initialMachine, onBack }) {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function MachineDetail(props) {
+  return (
+    <MachineErrorBoundary machineId={props.machineId} onBack={props.onBack}>
+      <MachineDetailContent {...props} />
+    </MachineErrorBoundary>
   );
 }
