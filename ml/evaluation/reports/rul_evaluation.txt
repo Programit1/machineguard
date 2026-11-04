@@ -1,0 +1,68 @@
+================================================================================
+        MACHINAGUARD: REMAINING USEFUL LIFE (RUL) MODEL EVALUATION REPORT       
+================================================================================
+
+Evaluated At (UTC):     2026-11-03T13:19:05.525587+00:00
+Model Artifact:         C:\Users\samyu\.gemini\antigravity\scratch\predictive-maintenance\ml\models\rul_model.joblib
+Dataset Location:       C:\Users\samyu\.gemini\antigravity\scratch\predictive-maintenance\ml\data\rul_dataset
+Target Unit:            operating cycles
+Validation Protocol:    Strict Machine-Level Split (Unit disjoint; zero row leakage)
+
+1. DATASET PARTITIONING
+--------------------------------------------------------------------------------
+Training Units:         80 units (U0001 .. U0080)
+Training Records:       18801 sequential cycles
+Test Units:             20 units (U0081 .. U0100)
+Testing Records:        4317 sequential cycles
+
+2. GLOBAL EVALUATION METRICS (20 UNSEEN MACHINES)
+--------------------------------------------------------------------------------
+Mean Absolute Error (MAE):     16.14 cycles
+Root Mean Squared Error (RMSE): 21.17 cycles
+Median Absolute Error:          12.83 cycles
+Coefficient of Determination R²: 0.9061
+
+Residual Distribution (Predicted - Actual):
+  Mean Error:                   +5.49 cycles
+  Standard Deviation:           20.45 cycles
+  25th Percentile:              -6.74 cycles
+  Median Residual:              +4.80 cycles
+  75th Percentile:              +16.83 cycles
+
+3. DETAILED PERFORMANCE BREAKDOWN BY TEST MACHINE
+--------------------------------------------------------------------------------
+Unit ID | Total Cycles | MAE (cycles) | RMSE (cycles) | MedAE (cycles) | R² Score
+--------+--------------+--------------+---------------+----------------+---------
+U0081   |          162 |        13.56 |         19.63 |          10.01 |   0.8237
+U0082   |          166 |        12.28 |         19.97 |           6.40 |   0.8263
+U0083   |          207 |        13.49 |         16.15 |          13.25 |   0.9269
+U0084   |          195 |         8.91 |         12.35 |           6.61 |   0.9519
+U0085   |          161 |        12.97 |         17.66 |          10.64 |   0.8556
+U0086   |          279 |        16.78 |         19.92 |          15.56 |   0.9388
+U0087   |          213 |        32.00 |         36.38 |          31.28 |   0.6500
+U0088   |          301 |        22.77 |         25.82 |          23.15 |   0.9117
+U0089   |          257 |        11.24 |         13.55 |          10.17 |   0.9667
+U0090   |          187 |        32.87 |         35.34 |          34.97 |   0.5715
+U0091   |          215 |        27.12 |         31.12 |          28.92 |   0.7486
+U0092   |          280 |        16.00 |         18.29 |          14.91 |   0.9488
+U0093   |          225 |        15.66 |         19.07 |          13.96 |   0.9138
+U0094   |          226 |        21.84 |         24.00 |          21.29 |   0.8647
+U0095   |          199 |         8.82 |         12.10 |           7.07 |   0.9557
+U0096   |          270 |        16.73 |         22.17 |          13.09 |   0.9191
+U0097   |          159 |         9.27 |         16.96 |           5.23 |   0.8635
+U0098   |          190 |         6.48 |          9.53 |           5.30 |   0.9698
+U0099   |          210 |         9.68 |         13.02 |           7.93 |   0.9539
+U0100   |          215 |         7.70 |         10.69 |           6.18 |   0.9704
+--------------------------------------------------------------------------------
+
+4. IN-DEPTH CRITICAL ANALYSIS
+--------------------------------------------------------------------------------
+Strengths:
+- High R² score (0.9061) proves strong capability to track progressive machine tool degradation.
+- Rigorous unit-level split ensures predictions reflect realistic deployment on completely new machines.
+- Physical validity: outputs are constrained strictly >= 0 cycles.
+
+Limitations & Operating Struggles:
+- Early-cycle predictions (cycles 1-20) exhibit higher uncertainty because tool wear has not yet diverged from baseline noise.
+- Median error of ~13 cycles means maintenance teams should plan tool changes with a ~15-20 cycle buffer.
+================================================================================

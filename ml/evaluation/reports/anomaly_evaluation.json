@@ -1,0 +1,42 @@
+{
+  "evaluation_timestamp": "2026-11-03T13:17:16.349139+00:00",
+  "model_path": "C:\\Users\\samyu\\.gemini\\antigravity\\scratch\\predictive-maintenance\\ml\\models\\anomaly_model.joblib",
+  "dataset_path": "C:\\Users\\samyu\\.gemini\\antigravity\\scratch\\predictive-maintenance\\ml\\data\\ai4i2020.csv",
+  "algorithm": "IsolationForest (300 estimators, contamination=0.02)",
+  "training_baseline": "Trained exclusively on nominal operating records (Machine failure == 0)",
+  "decision_threshold": 0.0,
+  "score_semantics": "Scores < 0.0 denote anomalous outlier sensor combinations. Scores > 0.0 denote inliers.",
+  "unsupervised_metrics": {
+    "total_samples": 10000,
+    "anomalies_flagged": 232,
+    "anomaly_rate_pct": 2.32,
+    "score_mean": 0.1279,
+    "score_std": 0.0551,
+    "score_min": -0.0866,
+    "score_max": 0.2145,
+    "score_percentiles": {
+      "p01": -0.0181,
+      "p05": 0.0222,
+      "p25": 0.093,
+      "median": 0.1399,
+      "p75": 0.1711,
+      "p95": 0.1982,
+      "p99": 0.2069
+    }
+  },
+  "subset_comparison": {
+    "nominal_operating_count": 9661,
+    "nominal_anomalies_flagged": 194,
+    "nominal_anomaly_rate_pct": 2.01,
+    "nominal_score_mean": 0.1295,
+    "failure_record_count": 339,
+    "failure_anomalies_flagged": 38,
+    "failure_anomaly_rate_pct": 11.21,
+    "failure_score_mean": 0.0808
+  },
+  "critical_methodological_notes": [
+    "Anomaly score indicates geometric isolation distance in high-dimensional sensor space, NOT failure probability.",
+    "AI4I 'Machine failure' is NOT a comprehensive ground truth for operational anomalies. Many legitimate anomalies are non-destructive transient deviations.",
+    "Contamination parameter is configured at 0.02, reflecting expected 2% severe outlier rate in baseline manufacturing plants."
+  ]
+}

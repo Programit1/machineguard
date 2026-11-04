@@ -1,0 +1,48 @@
+================================================================================
+        MACHINAGUARD: OPERATIONAL ANOMALY DETECTION EVALUATION REPORT           
+================================================================================
+
+Evaluated At (UTC):     2026-11-03T13:17:16.349139+00:00
+Model Artifact:         C:\Users\samyu\.gemini\antigravity\scratch\predictive-maintenance\ml\models\anomaly_model.joblib
+Algorithm:              IsolationForest (300 estimators, contamination=0.02)
+Baseline Fitting Set:   Trained exclusively on nominal operating records (Machine failure == 0)
+
+1. UNSUPERVISED DETECTION PERFORMANCE
+--------------------------------------------------------------------------------
+Total Operational Records:    10000
+Total Flagged as Anomalies:   232 (2.32%)
+Decision Cutoff Threshold:    0.0000 (Scores < 0 indicate outlier isolation)
+Average Anomaly Score:        0.1279 (std: 0.0551)
+Score Range:                  [-0.0866, 0.2145]
+
+Score Distribution Percentiles:
+  1st Percentile:             -0.0181
+  5th Percentile:             0.0222
+  25th Percentile:            0.0930
+  50th Percentile (Median):   0.1399
+  75th Percentile:            0.1711
+  95th Percentile:            0.1982
+  99th Percentile:            0.2069
+
+2. POPULATION SUBSET COMPARISON (NOMINAL VS. FAILURE RECORDS)
+--------------------------------------------------------------------------------
+Nominal Records (y=0):        9661 samples
+  - Mean Score:               0.1295
+  - Flagged as Anomaly:       194 (2.01%)
+
+Failure Records (y=1):        339 samples
+  - Mean Score:               0.0808 (Noticeably lower/more anomalous)
+  - Flagged as Anomaly:       38 (11.21%)
+
+3. METHODOLOGICAL RIGOR & INTERPRETATION RULES
+--------------------------------------------------------------------------------
+Rule 1: Anomaly Score != Failure Probability.
+  Isolation Forest measures whether a sensor point is 'easy to isolate' via random
+  hyperplane cuts. It is an unsupervised outlier detector, not a failure classifier.
+
+Rule 2: Lack of Ground Truth Anomaly Labels.
+  In real industrial settings, machine operators experience sensor dropouts, thermal
+  drift, and off-nominal load points that are anomalous without failing the machine.
+  Therefore, supervised classification metrics (precision/recall on failure labels)
+  are mathematically invalid as 'anomaly precision/recall'.
+================================================================================

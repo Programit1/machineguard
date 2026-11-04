@@ -1,0 +1,45 @@
+# Secrets & Credentials (NEVER commit live cloud credentials)
+.env
+*.env
+!.env.example
+backend/.env
+backend/*.env
+frontend/.env
+frontend/*.env
+*.pem
+*.key
+
+# Python artifacts & caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.pytest_cache/
+*.log
+.venv/
+env/
+venv/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+maintenance.db
+backend/maintenance.db
+backend/predictive_maintenance.db
+
+# Archives & unpacked source duplicates
+ml.zip
+extracted_zip/
+
+# Frontend build & packages
+frontend/node_modules/
+frontend/dist/
+node_modules/
+dist/
+
+# Operating System & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,63 @@
+{
+  "model_name": "MachinaGuard RUL Regressor",
+  "model_version": "1.0.0",
+  "algorithm": "RandomForestRegressor (100 estimators, max_depth=15, min_samples_split=4, min_samples_leaf=2)",
+  "dataset_name": "Predictive Maintenance Remaining Useful Life Dataset",
+  "dataset_source": "ml/data/rul_dataset/ (readings.csv, units.csv, ground_truth.csv)",
+  "dataset_type": "industrial physical telemetry with degradation cycles",
+  "training_date": "2026-11-03T13:10:47.508642+00:00",
+  "input_features": {
+    "numeric": [
+      "cycle",
+      "tool_wear_min",
+      "vibration_mm_s",
+      "torque_nm",
+      "process_temperature_k",
+      "air_temperature_k",
+      "rotational_speed_rpm"
+    ],
+    "categorical": [
+      "control_type"
+    ],
+    "feature_order": [
+      "cycle",
+      "tool_wear_min",
+      "vibration_mm_s",
+      "torque_nm",
+      "process_temperature_k",
+      "air_temperature_k",
+      "rotational_speed_rpm",
+      "control_type"
+    ]
+  },
+  "target_variable": "rul_cycles",
+  "target_unit": "cycles",
+  "preprocessing_steps": [
+    "Negative tool wear clipped to 0.0",
+    "Median imputation for missing sensor channels (vibration, torque, air temp across control types A/B/C)",
+    "StandardScaler normalization for numeric features",
+    "OneHotEncoder for categorical control_type [A, B, C]"
+  ],
+  "training_parameters": {
+    "n_estimators": 100,
+    "max_depth": 15,
+    "min_samples_split": 4,
+    "min_samples_leaf": 2,
+    "random_state": 42
+  },
+  "training_record_count": 18801,
+  "validation_record_count": 4317,
+  "evaluation_metrics": {
+    "mae_cycles": 16.1404,
+    "rmse_cycles": 21.173,
+    "median_absolute_error_cycles": 12.8323,
+    "r2_score": 0.9061
+  },
+  "model_artifact_filename": "rul_model.joblib",
+  "validation_strategy": "Unit-level split (80 train units, 20 test units; 100% disjoint machine units)",
+  "known_limitations": [
+    "Assumes machines operate under control protocols A, B, or C.",
+    "Prediction uncertainty increases during the first 10 cycles before degradation signal manifests.",
+    "Missing sensor channels are imputed with dataset medians per training distribution."
+  ]
+}

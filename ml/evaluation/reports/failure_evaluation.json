@@ -1,0 +1,59 @@
+{
+  "evaluation_timestamp": "2026-11-03T13:15:44.685436+00:00",
+  "model_path": "C:\\Users\\samyu\\.gemini\\antigravity\\scratch\\predictive-maintenance\\ml\\models\\failure_model.joblib",
+  "test_dataset_path": "C:\\Users\\samyu\\.gemini\\antigravity\\scratch\\predictive-maintenance\\ml\\data\\test_data.csv",
+  "class_distribution": {
+    "total_samples": 2000,
+    "nominal_samples": 1932,
+    "failure_samples": 68,
+    "failure_base_rate_pct": 3.4
+  },
+  "selected_threshold": 0.5,
+  "metrics": {
+    "accuracy": 0.969,
+    "precision": 0.5306,
+    "recall": 0.7647,
+    "f1_score": 0.6265,
+    "roc_auc": 0.9704,
+    "pr_auc": 0.7075
+  },
+  "confusion_matrix": {
+    "true_negative": 1886,
+    "false_positive": 46,
+    "false_negative": 16,
+    "true_positive": 52
+  },
+  "classification_report": {
+    "0": {
+      "precision": 0.9915878023133544,
+      "recall": 0.9761904761904762,
+      "f1-score": 0.983828899321857,
+      "support": 1932.0
+    },
+    "1": {
+      "precision": 0.5306122448979592,
+      "recall": 0.7647058823529411,
+      "f1-score": 0.6265060240963856,
+      "support": 68.0
+    },
+    "accuracy": 0.969,
+    "macro avg": {
+      "precision": 0.7611000236056569,
+      "recall": 0.8704481792717087,
+      "f1-score": 0.8051674617091213,
+      "support": 2000.0
+    },
+    "weighted avg": {
+      "precision": 0.975914633361231,
+      "recall": 0.969,
+      "f1-score": 0.971679921564191,
+      "support": 2000.0
+    }
+  },
+  "analysis_notes": [
+    "The model successfully detects 52 of 68 failures in the test set (76.5% recall).",
+    "There are 16 false negatives (missed failures) and 46 false positives (false alarms).",
+    "Because the training pipeline uses balanced class weights, recall is heavily prioritized to minimize costly equipment crashes.",
+    "The Precision of 53.1% reflects the severe 3.4% class imbalance in manufacturing; whenever the model alerts, there is a >50% chance of immediate physical failure."
+  ]
+}

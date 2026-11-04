@@ -1,0 +1,60 @@
+{
+  "model_name": "MachinaGuard Operational Anomaly Detector",
+  "model_version": "1.0.0",
+  "algorithm": "IsolationForest (300 estimators, contamination=0.02)",
+  "dataset_name": "UCI AI4I 2020 Predictive Maintenance Dataset",
+  "dataset_source": "ml/data/ai4i2020.csv",
+  "dataset_type": "nominal operational records only (Machine failure == 0)",
+  "training_date": "2026-11-03T13:13:02.905113+00:00",
+  "input_features": {
+    "categorical": [
+      "Type"
+    ],
+    "numeric": [
+      "Air temperature [K]",
+      "Process temperature [K]",
+      "Rotational speed [rpm]",
+      "Torque [Nm]",
+      "Tool wear [min]"
+    ],
+    "feature_order": [
+      "Type",
+      "Air temperature [K]",
+      "Process temperature [K]",
+      "Rotational speed [rpm]",
+      "Torque [Nm]",
+      "Tool wear [min]"
+    ]
+  },
+  "target_variable": "unsupervised outlier / anomaly flag",
+  "decision_threshold": 0.0,
+  "contamination": 0.02,
+  "preprocessing_steps": [
+    "StandardScaler normalization on numeric features",
+    "OneHotEncoder on Type categorical [L, M, H]"
+  ],
+  "training_parameters": {
+    "n_estimators": 300,
+    "contamination": 0.02,
+    "random_state": 42
+  },
+  "training_record_count": 9661,
+  "validation_record_count": 10000,
+  "evaluation_metrics": {
+    "total_samples_evaluated": 10000,
+    "total_anomalies_flagged": 232,
+    "nominal_detection_rate": 0.9799,
+    "failure_overlap_rate": 0.1121,
+    "normal_score_mean": 0.1295,
+    "normal_score_std": 0.0544,
+    "failure_score_mean": 0.0808,
+    "failure_score_std": 0.0557
+  },
+  "model_artifact_filename": "anomaly_model.joblib",
+  "validation_strategy": "Unsupervised distribution evaluation on normal baseline vs. known failure records",
+  "interpretation": "Decision score < 0 indicates anomalous outlier behavior. Anomaly score is an unsupervised distance measure, NOT a machine-failure probability.",
+  "known_limitations": [
+    "Detects geometric anomalies in feature space; physical failures with nominal signatures (e.g. subtle heat dissipation) may not appear anomalous.",
+    "Contamination parameter set to 0.02 based on expected nominal outlier tolerance."
+  ]
+}

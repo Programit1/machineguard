@@ -1,0 +1,198 @@
+{
+  "evaluation_timestamp": "2026-11-03T13:19:05.525587+00:00",
+  "model_path": "C:\\Users\\samyu\\.gemini\\antigravity\\scratch\\predictive-maintenance\\ml\\models\\rul_model.joblib",
+  "dataset_name": "Predictive Maintenance Remaining Useful Life Dataset",
+  "dataset_path": "C:\\Users\\samyu\\.gemini\\antigravity\\scratch\\predictive-maintenance\\ml\\data\\rul_dataset",
+  "algorithm": "RandomForestRegressor (100 estimators, max_depth=15, min_samples_split=4, min_samples_leaf=2)",
+  "validation_strategy": "Unit-level split (80 train units, 20 test units; 100% disjoint machines)",
+  "record_counts": {
+    "training_records": 18801,
+    "training_units": 80,
+    "testing_records": 4317,
+    "testing_units": 20
+  },
+  "target_unit": "cycles",
+  "global_metrics": {
+    "mae_cycles": 16.1404,
+    "rmse_cycles": 21.173,
+    "median_ae_cycles": 12.8323,
+    "r2_score": 0.9061
+  },
+  "residual_distribution": {
+    "mean_residual": 5.49,
+    "std_residual": 20.45,
+    "min_error": -75.17,
+    "max_error": 112.43,
+    "error_p25": -6.74,
+    "error_median": 4.8,
+    "error_p75": 16.83
+  },
+  "per_unit_results": [
+    {
+      "unit_id": "U0081",
+      "total_cycles": 162,
+      "mae_cycles": 13.56,
+      "rmse_cycles": 19.63,
+      "median_ae_cycles": 10.01,
+      "r2_score": 0.8237
+    },
+    {
+      "unit_id": "U0082",
+      "total_cycles": 166,
+      "mae_cycles": 12.28,
+      "rmse_cycles": 19.97,
+      "median_ae_cycles": 6.4,
+      "r2_score": 0.8263
+    },
+    {
+      "unit_id": "U0083",
+      "total_cycles": 207,
+      "mae_cycles": 13.49,
+      "rmse_cycles": 16.15,
+      "median_ae_cycles": 13.25,
+      "r2_score": 0.9269
+    },
+    {
+      "unit_id": "U0084",
+      "total_cycles": 195,
+      "mae_cycles": 8.91,
+      "rmse_cycles": 12.35,
+      "median_ae_cycles": 6.61,
+      "r2_score": 0.9519
+    },
+    {
+      "unit_id": "U0085",
+      "total_cycles": 161,
+      "mae_cycles": 12.97,
+      "rmse_cycles": 17.66,
+      "median_ae_cycles": 10.64,
+      "r2_score": 0.8556
+    },
+    {
+      "unit_id": "U0086",
+      "total_cycles": 279,
+      "mae_cycles": 16.78,
+      "rmse_cycles": 19.92,
+      "median_ae_cycles": 15.56,
+      "r2_score": 0.9388
+    },
+    {
+      "unit_id": "U0087",
+      "total_cycles": 213,
+      "mae_cycles": 32.0,
+      "rmse_cycles": 36.38,
+      "median_ae_cycles": 31.28,
+      "r2_score": 0.65
+    },
+    {
+      "unit_id": "U0088",
+      "total_cycles": 301,
+      "mae_cycles": 22.77,
+      "rmse_cycles": 25.82,
+      "median_ae_cycles": 23.15,
+      "r2_score": 0.9117
+    },
+    {
+      "unit_id": "U0089",
+      "total_cycles": 257,
+      "mae_cycles": 11.24,
+      "rmse_cycles": 13.55,
+      "median_ae_cycles": 10.17,
+      "r2_score": 0.9667
+    },
+    {
+      "unit_id": "U0090",
+      "total_cycles": 187,
+      "mae_cycles": 32.87,
+      "rmse_cycles": 35.34,
+      "median_ae_cycles": 34.97,
+      "r2_score": 0.5715
+    },
+    {
+      "unit_id": "U0091",
+      "total_cycles": 215,
+      "mae_cycles": 27.12,
+      "rmse_cycles": 31.12,
+      "median_ae_cycles": 28.92,
+      "r2_score": 0.7486
+    },
+    {
+      "unit_id": "U0092",
+      "total_cycles": 280,
+      "mae_cycles": 16.0,
+      "rmse_cycles": 18.29,
+      "median_ae_cycles": 14.91,
+      "r2_score": 0.9488
+    },
+    {
+      "unit_id": "U0093",
+      "total_cycles": 225,
+      "mae_cycles": 15.66,
+      "rmse_cycles": 19.07,
+      "median_ae_cycles": 13.96,
+      "r2_score": 0.9138
+    },
+    {
+      "unit_id": "U0094",
+      "total_cycles": 226,
+      "mae_cycles": 21.84,
+      "rmse_cycles": 24.0,
+      "median_ae_cycles": 21.29,
+      "r2_score": 0.8647
+    },
+    {
+      "unit_id": "U0095",
+      "total_cycles": 199,
+      "mae_cycles": 8.82,
+      "rmse_cycles": 12.1,
+      "median_ae_cycles": 7.07,
+      "r2_score": 0.9557
+    },
+    {
+      "unit_id": "U0096",
+      "total_cycles": 270,
+      "mae_cycles": 16.73,
+      "rmse_cycles": 22.17,
+      "median_ae_cycles": 13.09,
+      "r2_score": 0.9191
+    },
+    {
+      "unit_id": "U0097",
+      "total_cycles": 159,
+      "mae_cycles": 9.27,
+      "rmse_cycles": 16.96,
+      "median_ae_cycles": 5.23,
+      "r2_score": 0.8635
+    },
+    {
+      "unit_id": "U0098",
+      "total_cycles": 190,
+      "mae_cycles": 6.48,
+      "rmse_cycles": 9.53,
+      "median_ae_cycles": 5.3,
+      "r2_score": 0.9698
+    },
+    {
+      "unit_id": "U0099",
+      "total_cycles": 210,
+      "mae_cycles": 9.68,
+      "rmse_cycles": 13.02,
+      "median_ae_cycles": 7.93,
+      "r2_score": 0.9539
+    },
+    {
+      "unit_id": "U0100",
+      "total_cycles": 215,
+      "mae_cycles": 7.7,
+      "rmse_cycles": 10.69,
+      "median_ae_cycles": 6.18,
+      "r2_score": 0.9704
+    }
+  ],
+  "critical_analysis_notes": [
+    "Strong explanatory power with R\u00b2 of 0.9061 across 20 unseen industrial machines.",
+    "Mean Absolute Error of 16.14 cycles and Median AE of 12.83 cycles allow accurate maintenance scheduling window planning.",
+    "Zero target leakage: ground_truth damage, machine failure flags, and future cycles are completely excluded from feature space.",
+    "Input features include operational cycle count, tool wear, sensor temperatures, spindle speed, torque, vibration, and control type."
+  ]
+}
