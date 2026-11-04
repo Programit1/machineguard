@@ -105,7 +105,11 @@ export default function Sidebar({
       </div>
 
       {/* System Status Footer */}
-      <div className="p-3 border-t border-slate-200 bg-slate-50/80">
+      <div
+        onClick={() => onTabChange('system-status')}
+        className="p-3 border-t border-slate-200 bg-slate-50/80 cursor-pointer hover:bg-slate-100 transition-colors"
+        title="View detailed System Infrastructure & Service Status"
+      >
         <div className="flex items-center justify-between px-2 py-1 text-xs">
           <div className="flex items-center gap-2">
             <span

@@ -87,6 +87,13 @@ export default function SystemStatus() {
   const machinesStreaming = dashboardSummary?.online_machines || 0;
   const isSimulatorStreaming = Boolean(isFresh && machinesStreaming > 0);
 
+  const latestTelemetryIso = lastWriteTime
+    ? (!String(lastWriteTime).endsWith('Z') && !String(lastWriteTime).includes('+') ? `${lastWriteTime}Z` : lastWriteTime)
+    : null;
+  const telemetryAgeSec = latestTelemetryIso
+    ? Math.max(0, Math.round((Date.now() - new Date(latestTelemetryIso).getTime()) / 1000))
+    : null;
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Page Header */}
@@ -116,6 +123,65 @@ export default function SystemStatus() {
             <span>Audit Now</span>
           </button>
         </div>
+      </div>
+
+      {/* Telemetry & Synchronization Status Banner */}
+      <div
+        className={`rounded-xl border p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+          isSimulatorStreaming
+            ? 'border-emerald-200 bg-emerald-50/60 text-emerald-900'
+            : 'border-amber-300 bg-amber-50 text-amber-900'
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className={`flex h-9 w-9 items-center justify-center rounded-lg border shrink-0 ${
+              isSimulatorStreaming
+                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                : 'bg-amber-100 text-amber-800 border-amber-300'
+            }`}
+          >
+            {isSimulatorStreaming ? (
+              <Radio className="h-5 w-5 text-emerald-700 animate-pulse" />
+            ) : (
+              <Server className="h-5 w-5 text-amber-700" />
+            )}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider">
+                {isSimulatorStreaming ? 'Telemetry Streaming Active' : 'System Offline / Telemetry Paused'}
+              </span>
+              {telemetryAgeSec !== null && (
+                <span
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold border ${
+                    isSimulatorStreaming
+                      ? 'bg-emerald-200 text-emerald-900 border-emerald-300'
+                      : 'bg-amber-200/80 text-amber-900 border-amber-300'
+                  }`}
+                >
+                  {telemetryAgeSec > 3600
+                    ? `${Math.round(telemetryAgeSec / 3600)}h stale`
+                    : `${Math.round(telemetryAgeSec)}s ago`}
+                </span>
+              )}
+            </div>
+            <p className="text-xs mt-0.5 leading-relaxed opacity-90">
+              {isSimulatorStreaming
+                ? 'Local telemetry generator and machine sensors are transmitting live packets to Supabase cloud and ML inference engine.'
+                : 'Local telemetry generator or ML backend is paused. Showing latest persisted records from Supabase cloud database. Real-time inference resumes automatically upon local server reconnect.'}
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={runHealthAudit}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 transition-colors shadow-xs shrink-0"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+          <span>Sync Cloud State</span>
+        </button>
       </div>
 
       {/* Primary Components Grid */}

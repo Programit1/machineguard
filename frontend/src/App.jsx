@@ -289,6 +289,7 @@ export default function App() {
           lastUpdated={lastUpdated}
           backendOnline={backendOnline}
           cloudOnline={cloudOnline}
+          onNavigateToStatus={() => setActiveTab('system-status')}
         />
 
         <main className="flex-1 pb-12">
