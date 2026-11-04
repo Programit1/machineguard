@@ -2,13 +2,15 @@ import React from 'react';
 import {
   LayoutDashboard,
   Cpu,
-  Bell,
+  AlertTriangle,
+  Wrench,
   Activity,
   Shield,
   Radio,
 } from 'lucide-react';
 
-export default function Sidebar({ activeTab, setActiveTab, activeAlertsCount = 0, backendOnline = true }) {
+export default function Sidebar({ activeTab, setActiveTab, activeAlertsCount = 0, backendOnline = true, activeIncidentsCount = 0 }) {
+  const totalBadges = activeAlertsCount + activeIncidentsCount;
   const navItems = [
     {
       id: 'dashboard',
@@ -22,9 +24,14 @@ export default function Sidebar({ activeTab, setActiveTab, activeAlertsCount = 0
     },
     {
       id: 'alerts',
-      label: 'Alerts',
-      icon: Bell,
-      badge: activeAlertsCount > 0 ? activeAlertsCount : null,
+      label: 'Alerts & Incidents',
+      icon: AlertTriangle,
+      badge: totalBadges > 0 ? totalBadges : null,
+    },
+    {
+      id: 'maintenance-history',
+      label: 'Maintenance History',
+      icon: Wrench,
     },
     {
       id: 'system-status',

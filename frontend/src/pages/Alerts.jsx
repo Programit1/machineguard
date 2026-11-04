@@ -10,8 +10,20 @@ import {
   Check,
   ArrowRight,
   Filter,
+  ShieldAlert,
+  Flame,
+  Activity,
+  Zap,
 } from 'lucide-react';
-import { fetchAlerts, updateAlertStatus, fetchMachines } from '../api';
+import {
+  fetchAlerts,
+  updateAlertStatus,
+  fetchMachines,
+  fetchIncidents,
+  updateIncidentStatus,
+  fetchVerifications,
+} from '../api';
+import MaintenanceModal from '../components/MaintenanceModal';
 
 function formatLocalTime(ts) {
   if (!ts) return '—';
@@ -27,300 +39,530 @@ function formatLocalTime(ts) {
 }
 
 export default function Alerts({ onSelectMachine }) {
+  const [viewMode, setViewMode] = useState('incidents'); // 'incidents' | 'alerts'
   const [alerts, setAlerts] = useState([]);
+  const [incidents, setIncidents] = useState([]);
+  const [verificationsMap, setVerificationsMap] = useState({});
   const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('all'); // all, active, resolved
-  const [severityFilter, setSeverityFilter] = useState('all');
-  const [machineFilter, setMachineFilter] = useState('all');
 
-  const loadAlerts = async () => {
+  // Filters
+  const [incidentStatusFilter, setIncidentStatusFilter] = useState('all');
+  const [alertStatusFilter, setAlertStatusFilter] = useState('all');
+  const [selectedMachineFilter, setSelectedMachineFilter] = useState('all');
+
+  // Maintenance Modal
+  const [isMaintenanceModalOpen, setIsMaintenanceModalOpen] = useState(false);
+  const [activeIncidentForMaintenance, setActiveIncidentForMaintenance] = useState(null);
+
+  const loadData = async () => {
     try {
-      const [alertData, machineData] = await Promise.all([
-        fetchAlerts(statusFilter === 'all' ? null : statusFilter),
+      const [alertData, incidentData, machineData] = await Promise.all([
+        fetchAlerts(alertStatusFilter === 'all' ? null : alertStatusFilter),
+        fetchIncidents(incidentStatusFilter === 'all' ? null : incidentStatusFilter),
         fetchMachines().catch(() => []),
       ]);
-      setAlerts(alertData);
-      setMachines(machineData);
+
+      setAlerts(alertData || []);
+      setIncidents(incidentData || []);
+      setMachines(machineData || []);
+
+      // Fetch verification states for incidents
+      const vMap = {};
+      await Promise.all(
+        (incidentData || []).map(async (inc) => {
+          try {
+            const vList = await fetchVerifications(inc.incident_id);
+            if (vList && vList.length > 0) {
+              vMap[inc.incident_id] = vList[0];
+            }
+          } catch {
+            // ignore
+          }
+        })
+      );
+      setVerificationsMap(vMap);
     } catch (err) {
-      console.error('Failed to load alerts:', err);
+      console.error('Failed to load alerts & incidents:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadAlerts();
-    const interval = setInterval(loadAlerts, 2000);
+    loadData();
+    const interval = setInterval(loadData, 2000);
     return () => clearInterval(interval);
-  }, [statusFilter]);
+  }, [incidentStatusFilter, alertStatusFilter]);
 
-  const handleResolve = async (alertId) => {
+  const handleAlertResolve = async (alertId) => {
     try {
       await updateAlertStatus(alertId, 'RESOLVED');
-      await loadAlerts();
+      await loadData();
     } catch (err) {
       console.error('Failed to resolve alert:', err);
     }
   };
 
-  const filteredAlerts = alerts.filter((a) => {
-    // Severity Filter
-    if (severityFilter !== 'all') {
-      const sev = (a.severity || a.risk_level || '').toUpperCase();
-      if (sev !== severityFilter.toUpperCase()) return false;
+  const handleIncidentStatus = async (incidentId, newStatus) => {
+    try {
+      await updateIncidentStatus(incidentId, newStatus, 'Operator Sarah');
+      await loadData();
+    } catch (err) {
+      console.error('Failed to update incident status:', err);
     }
-    // Machine Filter
-    if (machineFilter !== 'all' && a.machine_id !== machineFilter) {
+  };
+
+  const openMaintenanceForIncident = (inc) => {
+    setActiveIncidentForMaintenance(inc);
+    setIsMaintenanceModalOpen(true);
+  };
+
+  // Filter incidents
+  const filteredIncidents = incidents.filter((inc) => {
+    if (selectedMachineFilter !== 'all' && inc.machine_id !== selectedMachineFilter) {
       return false;
     }
-    // Status Filter (client-side backup for robust consistency)
-    if (statusFilter !== 'all') {
-      const isResolved = a.status?.toUpperCase() === 'RESOLVED';
-      if (statusFilter === 'active' && isResolved) return false;
-      if (statusFilter === 'resolved' && !isResolved) return false;
+    if (incidentStatusFilter !== 'all') {
+      if (inc.status.toLowerCase() !== incidentStatusFilter.toLowerCase()) return false;
     }
     return true;
   });
 
-  const activeCount = alerts.filter((a) => a.status?.toUpperCase() === 'ACTIVE').length;
-  const resolvedCount = alerts.filter((a) => a.status?.toUpperCase() === 'RESOLVED').length;
+  // Filter alerts
+  const filteredAlerts = alerts.filter((a) => {
+    if (selectedMachineFilter !== 'all' && a.machine_id !== selectedMachineFilter) {
+      return false;
+    }
+    if (alertStatusFilter !== 'all') {
+      const isResolved = a.status?.toUpperCase() === 'RESOLVED';
+      if (alertStatusFilter === 'active' && isResolved) return false;
+      if (alertStatusFilter === 'resolved' && !isResolved) return false;
+    }
+    return true;
+  });
+
+  const activeIncidentsCount = incidents.filter(
+    (i) => !['resolved'].includes((i.status || '').toLowerCase())
+  ).length;
+
+  const activeAlertsCount = alerts.filter(
+    (a) => (a.status || '').toUpperCase() === 'ACTIVE'
+  ).length;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header & Filter Controls Bar */}
+      {/* Top Banner & Mode Toggle */}
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-lg font-bold text-slate-900 tracking-tight">
-            Incident Alerts & Alarm Center
+          <h1 className="text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <ShieldAlert className="h-5 w-5 text-rose-600" />
+            <span>Alerts & Critical Incident Operations Center</span>
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Operational rule violations, ML failure alerts, and anomaly records
+            Operational rule violations, ML failure forecasts, active incident management, and automated maintenance verification.
           </p>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-slate-900 shadow-xs"
+        {/* View Mode Toggle */}
+        <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg border border-slate-200/80">
+          <button
+            onClick={() => setViewMode('incidents')}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              viewMode === 'incidents'
+                ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
-            <option value="all">All Alerts ({alerts.length})</option>
-            <option value="active">Active Only ({activeCount})</option>
-            <option value="resolved">Resolved History ({resolvedCount})</option>
-          </select>
+            <Flame className="h-3.5 w-3.5 text-rose-600" />
+            <span>Critical Incidents</span>
+            {activeIncidentsCount > 0 && (
+              <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-1.5 py-0.2 rounded-full font-mono">
+                {activeIncidentsCount}
+              </span>
+            )}
+          </button>
 
-          {/* Severity Filter */}
-          <select
-            value={severityFilter}
-            onChange={(e) => setSeverityFilter(e.target.value)}
-            className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-slate-900 shadow-xs"
+          <button
+            onClick={() => setViewMode('alerts')}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              viewMode === 'alerts'
+                ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
-            <option value="all">All Severities</option>
-            <option value="CRITICAL">Critical</option>
-            <option value="HIGH">High</option>
-            <option value="WARNING">Warning / Medium</option>
-            <option value="LOW">Low</option>
-          </select>
-
-          {/* Machine Filter */}
-          <select
-            value={machineFilter}
-            onChange={(e) => setMachineFilter(e.target.value)}
-            className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-slate-900 shadow-xs"
-          >
-            <option value="all">All Machines</option>
-            {machines.map((m) => (
-              <option key={m.machine_id} value={m.machine_id}>
-                {m.machine_id} - {m.name}
-              </option>
-            ))}
-          </select>
+            <Bell className="h-3.5 w-3.5 text-amber-600" />
+            <span>Telemetry Alerts</span>
+            {activeAlertsCount > 0 && (
+              <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.2 rounded-full font-mono">
+                {activeAlertsCount}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
-      {/* Alerts Structured Feed */}
-      {filteredAlerts.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-500 shadow-xs">
-          <CheckCircle className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
-          <h3 className="text-sm font-bold text-slate-800">No matching alerts</h3>
-          <p className="text-xs text-slate-500 mt-1">
-            {statusFilter === 'active'
-              ? 'All machinery operating within safe thresholds. No active unresolved alarms.'
-              : 'No alert entries match the selected filter criteria.'}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3.5">
-          {filteredAlerts.map((alert) => {
-            const isResolved = alert.status?.toUpperCase() === 'RESOLVED';
-            const sev = (alert.severity || alert.risk_level || 'HIGH').toUpperCase();
-            const isCritical = sev === 'CRITICAL';
-            const isHigh = sev === 'HIGH';
-            const isMedium = sev === 'WARNING' || sev === 'MEDIUM';
+      {/* VIEW 1: CRITICAL INCIDENTS & RECOVERY VERIFICATION */}
+      {viewMode === 'incidents' && (
+        <div className="space-y-4">
+          {/* Incidents Filter Controls */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                <Filter className="h-3.5 w-3.5" /> Filter Status:
+              </span>
+              {[
+                { id: 'all', label: 'All Incidents' },
+                { id: 'open', label: 'Open' },
+                { id: 'acknowledged', label: 'Acknowledged' },
+                { id: 'under maintenance', label: 'Under Maintenance' },
+                { id: 'verification pending', label: 'Verification Pending' },
+                { id: 'resolved', label: 'Resolved' },
+                { id: 'not fixed', label: 'Not Fixed' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setIncidentStatusFilter(tab.id)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    incidentStatusFilter === tab.id
+                      ? 'bg-blue-600 text-white font-semibold'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-            // Severity Badge Styling as specified:
-            // Red: Critical, Orange: High, Amber: Medium, Neutral: Low, Green: Resolved
-            let badgeBg = 'bg-slate-100 text-slate-700 border-slate-200';
-            let Icon = AlertTriangle;
+            <select
+              value={selectedMachineFilter}
+              onChange={(e) => setSelectedMachineFilter(e.target.value)}
+              className="text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-medium text-slate-700"
+            >
+              <option value="all">All Machinery Units</option>
+              {machines.map((m) => (
+                <option key={m.machine_id} value={m.machine_id}>
+                  {m.machine_id} - {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            if (isResolved) {
-              badgeBg = 'bg-emerald-50 text-emerald-800 border-emerald-200';
-              Icon = CheckCircle;
-            } else if (isCritical) {
-              badgeBg = 'bg-rose-50 text-rose-800 border-rose-200';
-              Icon = AlertOctagon;
-            } else if (isHigh) {
-              badgeBg = 'bg-orange-50 text-orange-800 border-orange-200';
-              Icon = AlertTriangle;
-            } else if (isMedium) {
-              badgeBg = 'bg-amber-50 text-amber-800 border-amber-200';
-              Icon = AlertTriangle;
-            }
-
-            // Triggering values object or JSON
-            let trigVals = alert.triggering_values;
-            if (typeof trigVals === 'string') {
-              try {
-                trigVals = JSON.parse(trigVals);
-              } catch {
-                trigVals = null;
-              }
-            }
-
-            return (
-              <div
-                key={alert.id}
-                className={`rounded-xl border bg-white p-4 shadow-xs transition-colors ${
-                  isResolved
-                    ? 'border-slate-200 opacity-80'
-                    : isCritical
-                    ? 'border-rose-300 ring-1 ring-rose-200'
-                    : isHigh
-                    ? 'border-orange-300'
-                    : 'border-slate-200'
-                }`}
-              >
-                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                  {/* Left Column: Severity, Machine, Title, Description */}
-                  <div className="flex-1 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {/* Severity Label & Icon */}
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold uppercase border ${badgeBg}`}>
-                        <Icon className="h-3.5 w-3.5" />
-                        <span>{isResolved ? 'Resolved' : sev}</span>
-                      </span>
-
-                      {/* Machine ID & Name (Clickable) */}
-                      <button
-                        onClick={() => onSelectMachine(alert.machine_id)}
-                        className="inline-flex items-center gap-1 font-mono text-xs font-bold text-blue-700 hover:text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200"
-                        title="Open machine monitoring page"
-                      >
-                        <Cpu className="h-3 w-3" />
-                        <span>{alert.machine_id}</span>
-                      </button>
-
-                      <span className="text-xs font-semibold text-slate-800">
-                        {alert.machine_name}
-                      </span>
-
-                      {/* Alert Source */}
-                      {alert.alert_source && (
-                        <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200 uppercase">
-                          Src: {alert.alert_source}
-                        </span>
-                      )}
-
-                      {/* Timestamp */}
-                      <div className="flex items-center gap-1 text-[11px] font-mono text-slate-500 ml-auto">
-                        <Clock className="h-3 w-3 text-slate-400" />
-                        <span>{formatLocalTime(alert.timestamp)}</span>
-                      </div>
-                    </div>
-
-                    {/* Alert Title & Reason */}
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900">
-                        {alert.title || alert.reason}
-                      </h3>
-                      <p className="mt-0.5 text-xs text-slate-600 leading-relaxed">
-                        {alert.reason}
-                      </p>
-                    </div>
-
-                    {/* Triggering Sensor Values & Configured Rule */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
-                      {/* Configured Threshold or Rule */}
-                      {alert.threshold_or_rule && (
-                        <div className="text-[11px] text-slate-600 rounded bg-slate-50 border border-slate-200 p-2">
-                          <span className="font-semibold text-slate-700">Configured Rule / Limit: </span>
-                          <span className="font-mono text-slate-800">{alert.threshold_or_rule}</span>
-                        </div>
-                      )}
-
-                      {/* Actual Triggering Values */}
-                      {trigVals && Object.keys(trigVals).length > 0 && (
-                        <div className="text-[11px] text-slate-600 rounded bg-slate-50 border border-slate-200 p-2">
-                          <span className="font-semibold text-slate-700">Triggering Values: </span>
-                          <span className="font-mono text-slate-800">
-                            {Object.entries(trigVals).map(([k, v]) => `${k}: ${v}`).join(' | ')}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Recommended Action */}
-                    {alert.recommendation && (
-                      <div className="text-xs text-slate-600 flex items-start gap-1.5 pt-0.5">
-                        <Wrench className="h-3.5 w-3.5 text-slate-500 shrink-0 mt-0.5" />
-                        <span>
-                          <strong className="text-slate-700">Recommended Action:</strong> {alert.recommendation}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Resolution Note if resolved */}
-                    {isResolved && alert.resolution_note && (
-                      <div className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 rounded p-2">
-                        <strong className="font-semibold">Audit Resolution Note:</strong> {alert.resolution_note}
-                        {alert.resolved_at && (
-                          <span className="block mt-0.5 font-mono text-[10px] text-emerald-700">
-                            Resolved At: {formatLocalTime(alert.resolved_at)}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right Column: Action Buttons */}
-                  <div className="flex lg:flex-col items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
-                    <button
-                      onClick={() => onSelectMachine(alert.machine_id)}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition-colors w-full sm:w-auto"
-                    >
-                      <span>View Machine</span>
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </button>
-
-                    {!isResolved && (
-                      <button
-                        onClick={() => handleResolve(alert.id)}
-                        className="inline-flex items-center justify-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors w-full sm:w-auto"
-                      >
-                        <Check className="h-3.5 w-3.5 text-emerald-600" />
-                        <span>Resolve Alert</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
+          {/* Incidents List */}
+          <div className="space-y-3">
+            {filteredIncidents.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-12 text-center space-y-2">
+                <CheckCircle className="h-8 w-8 text-emerald-500 mx-auto" />
+                <div className="text-xs font-semibold text-slate-700">No Critical Incidents Found</div>
+                <p className="text-[11px] text-slate-400">
+                  All equipment is operating within nominal safety boundaries.
+                </p>
               </div>
-            );
-          })}
+            ) : (
+              filteredIncidents.map((inc) => {
+                const verif = verificationsMap[inc.incident_id];
+                const statusLower = inc.status.toLowerCase();
+                const isResolved = statusLower === 'resolved';
+                const isPending = statusLower === 'verification pending';
+                const isNotFixed = statusLower === 'not fixed';
+
+                // Status Badge Color
+                let statusBadgeClass = 'bg-rose-100 text-rose-800 border-rose-200';
+                if (statusLower === 'acknowledged') statusBadgeClass = 'bg-amber-100 text-amber-800 border-amber-200';
+                else if (statusLower === 'under maintenance') statusBadgeClass = 'bg-blue-100 text-blue-800 border-blue-200';
+                else if (isPending) statusBadgeClass = 'bg-indigo-100 text-indigo-800 border-indigo-200 animate-pulse';
+                else if (isResolved) statusBadgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+
+                // Parse triggering values
+                let trigValues = {};
+                try {
+                  trigValues = JSON.parse(inc.triggering_values || '{}');
+                } catch {
+                  trigValues = {};
+                }
+
+                return (
+                  <div
+                    key={inc.id}
+                    className={`rounded-xl border bg-white p-5 shadow-xs transition-all space-y-3.5 ${
+                      isResolved
+                        ? 'border-emerald-200 bg-emerald-50/20'
+                        : isNotFixed
+                        ? 'border-rose-300 bg-rose-50/20'
+                        : 'border-slate-200'
+                    }`}
+                  >
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                            {inc.incident_id}
+                          </span>
+
+                          <button
+                            onClick={() => onSelectMachine && onSelectMachine(inc.machine_id)}
+                            className="font-mono text-xs font-bold text-blue-700 hover:underline bg-blue-50 px-2 py-0.5 rounded border border-blue-200 flex items-center gap-1"
+                          >
+                            <Cpu className="h-3 w-3" />
+                            <span>{inc.machine_id}</span>
+                          </button>
+
+                          <span className="font-semibold text-xs text-slate-700">
+                            {inc.machine_name}
+                          </span>
+
+                          <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
+                            {inc.condition_type}
+                          </span>
+
+                          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${statusBadgeClass}`}>
+                            {inc.status.toUpperCase()}
+                          </span>
+                        </div>
+
+                        <h3 className="font-bold text-sm text-slate-900 pt-1">
+                          {inc.title}
+                        </h3>
+
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          {inc.description}
+                        </p>
+                      </div>
+
+                      {/* Right metadata & Action Buttons */}
+                      <div className="text-right space-y-2 shrink-0">
+                        <div className="text-[11px] text-slate-400 flex items-center gap-1 justify-end">
+                          <Clock className="h-3 w-3" />
+                          <span>Detected: {formatLocalTime(inc.created_at)}</span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5 justify-end">
+                          {statusLower === 'open' && (
+                            <button
+                              onClick={() => handleIncidentStatus(inc.incident_id, 'Acknowledged')}
+                              className="px-2.5 py-1 text-xs font-semibold rounded bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100"
+                            >
+                              Acknowledge
+                            </button>
+                          )}
+
+                          {['open', 'acknowledged'].includes(statusLower) && (
+                            <button
+                              onClick={() => handleIncidentStatus(inc.incident_id, 'Under Maintenance')}
+                              className="px-2.5 py-1 text-xs font-semibold rounded bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100"
+                            >
+                              Under Maintenance
+                            </button>
+                          )}
+
+                          {/* Record Maintenance Action */}
+                          {!isResolved && (
+                            <button
+                              onClick={() => openMaintenanceForIncident(inc)}
+                              className="px-3 py-1 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 shadow-xs flex items-center gap-1.5"
+                            >
+                              <Wrench className="h-3.5 w-3.5" />
+                              <span>Record Maintenance</span>
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => onSelectMachine && onSelectMachine(inc.machine_id)}
+                            className="px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-slate-800 bg-slate-50 border border-slate-200 rounded flex items-center gap-1"
+                          >
+                            <span>Open Machine</span>
+                            <ArrowRight className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Triggering Sensor Values Snapshot */}
+                    {Object.keys(trigValues).length > 0 && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <span className="font-semibold text-slate-700 text-[11px]">Triggering Values:</span>
+                        {Object.entries(trigValues).map(([k, v]) => (
+                          <div key={k} className="text-[11px] text-slate-600 font-mono">
+                            <span className="text-slate-400">{k}:</span>{' '}
+                            <span className="font-bold text-slate-800">{String(v)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Verification Status & Evidence Box */}
+                    {verif && (
+                      <div className={`rounded-lg p-3 text-xs border ${
+                        verif.status === 'RESOLVED'
+                          ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                          : verif.status === 'NOT FIXED'
+                          ? 'bg-rose-50/70 border-rose-200 text-rose-900'
+                          : 'bg-indigo-50/70 border-indigo-200 text-indigo-900'
+                      }`}>
+                        <div className="flex items-center justify-between font-semibold text-[11px] mb-1">
+                          <span className="flex items-center gap-1.5">
+                            {verif.status === 'RESOLVED' ? (
+                              <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                            ) : verif.status === 'NOT FIXED' ? (
+                              <AlertOctagon className="h-3.5 w-3.5 text-rose-600" />
+                            ) : (
+                              <Clock className="h-3.5 w-3.5 text-indigo-600 animate-spin" />
+                            )}
+                            <span>Automated Recovery Verification ({verif.status}):</span>
+                          </span>
+                          <span className="font-mono text-[10px] text-slate-500">
+                            {formatLocalTime(verif.verification_timestamp)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-mono leading-relaxed">
+                          {verif.evidence}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
+
+      {/* VIEW 2: REAL-TIME TELEMETRY ALERTS */}
+      {viewMode === 'alerts' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                <Filter className="h-3.5 w-3.5" /> Status:
+              </span>
+              {[
+                { id: 'all', label: 'All Alerts' },
+                { id: 'active', label: 'Active Alarms' },
+                { id: 'resolved', label: 'Resolved History' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setAlertStatusFilter(tab.id)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    alertStatusFilter === tab.id
+                      ? 'bg-blue-600 text-white font-semibold'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <select
+              value={selectedMachineFilter}
+              onChange={(e) => setSelectedMachineFilter(e.target.value)}
+              className="text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-medium text-slate-700"
+            >
+              <option value="all">All Machinery Units</option>
+              {machines.map((m) => (
+                <option key={m.machine_id} value={m.machine_id}>
+                  {m.machine_id} - {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-3">
+            {filteredAlerts.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-12 text-center space-y-2">
+                <CheckCircle className="h-8 w-8 text-emerald-500 mx-auto" />
+                <div className="text-xs font-semibold text-slate-700">No Telemetry Alerts</div>
+                <p className="text-[11px] text-slate-400">
+                  Physical sensors and ML models are reporting safe operation.
+                </p>
+              </div>
+            ) : (
+              filteredAlerts.map((a) => {
+                const isCrit = (a.severity || '').toUpperCase() === 'CRITICAL';
+                const isResolved = a.status?.toUpperCase() === 'RESOLVED';
+
+                return (
+                  <div
+                    key={a.id}
+                    className={`rounded-xl border bg-white p-4 shadow-xs transition-colors space-y-2.5 ${
+                      isResolved
+                        ? 'border-slate-200 opacity-75'
+                        : isCrit
+                        ? 'border-rose-300 bg-rose-50/20'
+                        : 'border-amber-200 bg-amber-50/20'
+                    }`}
+                  >
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => onSelectMachine && onSelectMachine(a.machine_id)}
+                            className="font-mono text-xs font-bold text-blue-700 hover:underline bg-blue-50 px-2 py-0.5 rounded border border-blue-200"
+                          >
+                            {a.machine_id}
+                          </button>
+                          <span className="font-semibold text-xs text-slate-800">
+                            {a.machine_name}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                              isCrit
+                                ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                            }`}
+                          >
+                            {a.severity || a.risk_level}
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                            {a.status}
+                          </span>
+                        </div>
+
+                        <div className="text-xs font-bold text-slate-900 pt-0.5">
+                          {a.title || a.reason}
+                        </div>
+
+                        <p className="text-xs text-slate-600">
+                          {a.reason}
+                        </p>
+                      </div>
+
+                      <div className="text-right space-y-1.5 shrink-0">
+                        <div className="text-[11px] text-slate-400">
+                          {formatLocalTime(a.timestamp)}
+                        </div>
+                        {!isResolved && (
+                          <button
+                            onClick={() => handleAlertResolve(a.id)}
+                            className="px-2.5 py-1 text-xs font-semibold rounded bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+                          >
+                            Mark Resolved
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {a.resolution_note && (
+                      <div className="text-[11px] font-mono text-emerald-800 bg-emerald-50 border border-emerald-200 p-2 rounded">
+                        {a.resolution_note}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Maintenance Action Modal */}
+      <MaintenanceModal
+        isOpen={isMaintenanceModalOpen}
+        onClose={() => setIsMaintenanceModalOpen(false)}
+        incident={activeIncidentForMaintenance}
+        onSuccess={loadData}
+      />
     </div>
   );
 }

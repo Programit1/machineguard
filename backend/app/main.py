@@ -7,7 +7,7 @@ from .database import engine, Base, SessionLocal
 from .models import Machine, utcnow
 from .crud import ensure_schema_migrations
 from .config import DATABASE_URL, ALLOWED_ORIGINS
-from .routers import machines, telemetry, predictions, alerts, dashboard, ml_models
+from .routers import machines, telemetry, predictions, alerts, dashboard, ml_models, incidents
 from .ml_service import ml_engine
 
 logger = logging.getLogger("machineguard")
@@ -87,6 +87,7 @@ app.include_router(predictions.router)
 app.include_router(alerts.router)
 app.include_router(dashboard.router)
 app.include_router(ml_models.router)
+app.include_router(incidents.router)
 
 # Mount un-prefixed aliases for external verification test compatibility if needed
 app.include_router(machines.router, prefix="", tags=["Aliases"])

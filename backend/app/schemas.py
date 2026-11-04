@@ -265,3 +265,71 @@ class MLEvaluationReportsResponse(BaseModel):
     failure_evaluation: Optional[Dict[str, Any]] = None
     anomaly_evaluation: Optional[Dict[str, Any]] = None
     rul_evaluation: Optional[Dict[str, Any]] = None
+
+# --- Incident Management & Verification Schemas ---
+class IncidentResponse(BaseModel):
+    id: int
+    incident_id: str
+    machine_id: str
+    machine_name: str
+    telemetry_id: Optional[int] = None
+    prediction_id: Optional[int] = None
+    alert_id: Optional[int] = None
+    condition_type: str
+    severity: str = "CRITICAL"
+    status: str = "Open"
+    title: str
+    description: str
+    triggering_values: Any = {}
+    failure_probability: Optional[float] = None
+    anomaly_score: Optional[float] = None
+    created_at: datetime
+    updated_at: datetime
+    acknowledged_at: Optional[datetime] = None
+    acknowledged_by: Optional[str] = None
+    resolved_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class IncidentStatusUpdate(BaseModel):
+    status: str = Field(..., example="Acknowledged", description="Status: Open, Acknowledged, Under Maintenance, Verification Pending, Resolved, Not Fixed")
+    operator_name: Optional[str] = Field("Operator", example="Operator John")
+
+class MaintenanceCreate(BaseModel):
+    machine_id: str = Field(..., example="CNC-001")
+    incident_id: Optional[str] = Field(None, example="INC-20261104-001")
+    action: str = Field(..., example="Replaced worn cutter insert and recalibrated coolant pressure")
+    technician: Optional[str] = Field("System Operator", example="Tech Lead Alex")
+    notes: Optional[str] = Field("", example="Spindle inspected; tool wear counter reset")
+
+class MaintenanceResponse(BaseModel):
+    id: int
+    machine_id: str
+    incident_id: Optional[str] = None
+    action: str
+    technician: str
+    notes: Optional[str] = ""
+    timestamp: datetime
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class IncidentVerificationResponse(BaseModel):
+    id: int
+    incident_id: str
+    machine_id: str
+    maintenance_log_id: Optional[int] = None
+    status: str # RESOLVED, NOT FIXED, IN_PROGRESS
+    consecutive_healthy_count: int
+    required_healthy_count: int = 3
+    verification_timestamp: datetime
+    evidence: str
+    supporting_telemetry_ids: Any = []
+    evaluated_predictions: Any = {}
+    notes: Optional[str] = ""
+
+    class Config:
+        from_attributes = True
+

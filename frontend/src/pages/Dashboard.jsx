@@ -49,18 +49,18 @@ export default function Dashboard({
   onNavigateToMachines,
   onNavigateToAlerts,
 }) {
-  // 1. Backend Offline State
-  if (!backendOnline) {
+  // 1. Connection Error State (only block if summary is completely unavailable)
+  if (!summary && !backendOnline) {
     return (
       <div className="p-8 max-w-4xl mx-auto">
         <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-8 text-center shadow-xs">
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-rose-100 text-rose-600 mb-3">
             <ServerOff className="h-6 w-6" />
           </div>
-          <h3 className="text-base font-bold text-slate-800">Backend Gateway Connection Offline</h3>
+          <h3 className="text-base font-bold text-slate-800">Connection Offline</h3>
           <p className="mt-1 text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
-            The frontend cannot connect to <code className="bg-white px-1.5 py-0.5 rounded border border-rose-200 text-rose-700 font-mono text-[11px]">{API_BASE.startsWith('http') ? API_BASE : `${window.location.origin}/api`}</code>.
-            Ensure the FastAPI server is running.
+            The frontend cannot connect to Supabase or the local FastAPI backend.
+            Ensure internet connectivity or verify database credentials.
           </p>
           <div className="mt-4">
             <button
@@ -86,9 +86,19 @@ export default function Dashboard({
     );
   }
 
+  // Telemetry Freshness & Stale Calculation (> 45s considered stale / offline)
+  const latestTelemetryTs = (summary.recent_telemetry && summary.recent_telemetry[0]?.timestamp)
+    || (machines && machines.map(m => m.latest_reading?.timestamp).filter(Boolean).sort().reverse()[0]);
+  const latestTelemetryIso = latestTelemetryTs
+    ? (!String(latestTelemetryTs).endsWith('Z') && !String(latestTelemetryTs).includes('+') ? `${latestTelemetryTs}Z` : latestTelemetryTs)
+    : null;
+  const telemetryAgeSec = latestTelemetryIso ? Math.max(0, Math.round((Date.now() - new Date(latestTelemetryIso).getTime()) / 1000)) : 999;
+  const isTelemetryStale = !latestTelemetryTs || telemetryAgeSec > 45;
+  const isSystemOffline = !backendOnline || isTelemetryStale;
+
   // Fleet stats
   const totalMachines = summary.total_machines || machines.length;
-  const runningMachines = summary.online_machines || machines.filter(m => m.is_online).length;
+  const runningMachines = isSystemOffline ? 0 : (summary.online_machines || machines.filter(m => m.is_online).length);
   const warningMachines = summary.attention_machines || 0;
   const criticalMachines = summary.critical_risk_machines || 0;
   const totalActiveAlerts = summary.active_alerts_count || 0;
@@ -105,6 +115,67 @@ export default function Dashboard({
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Stale / Offline Notification Banner */}
+      {isSystemOffline && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-900">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
+              <ServerOff className="h-5 w-5 text-amber-700" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                  System Offline / Telemetry Paused
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-200/80 text-amber-900 font-semibold border border-amber-300">
+                  {telemetryAgeSec > 3600 ? `${Math.round(telemetryAgeSec / 3600)}h stale` : `${Math.round(telemetryAgeSec)}s ago`}
+                </span>
+              </div>
+              <p className="text-xs text-amber-800/90 mt-0.5">
+                Local telemetry generator or ML backend is paused. Showing latest persisted records from Supabase cloud database. Real-time inference resumes automatically upon local server reconnect.
+              </p>
+            </div>
+          </div>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white hover:bg-amber-100 border border-amber-300 text-amber-900 transition-colors shadow-xs shrink-0"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span>Sync Cloud State</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Critical Incident Banner */}
+      {criticalMachines > 0 && (
+        <div className="rounded-xl border border-rose-300 bg-rose-50 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-rose-900">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-100 text-rose-700 border border-rose-300 shrink-0">
+              <AlertOctagon className="h-5 w-5 text-rose-600 animate-pulse" />
+            </div>
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wider text-rose-800">
+                Critical Incident Notification ({criticalMachines} Machine{criticalMachines > 1 ? 's' : ''} in Fault State)
+              </div>
+              <p className="text-xs text-rose-700 mt-0.5">
+                Immediate mechanical or thermal hazard detected. Review active incidents and complete maintenance verification.
+              </p>
+            </div>
+          </div>
+          {onNavigateToAlerts && (
+            <button
+              onClick={onNavigateToAlerts}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-colors shrink-0"
+            >
+              <span>Manage Incidents</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* 1. Overall Fleet Health Overview Banner */}
       <div className={`rounded-xl border p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${fleetHealth.color}`}>
         <div className="flex items-center gap-3">
@@ -247,7 +318,7 @@ export default function Dashboard({
               const ts = reading?.timestamp || pred?.timestamp;
               const iso = ts ? ((!String(ts).endsWith('Z') && !String(ts).includes('+')) ? `${ts}Z` : ts) : null;
               const deltaSec = iso ? Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000)) : 999;
-              const isStale = deltaSec > 5;
+              const isStale = deltaSec > 45;
               const isActuallyOnline = m.is_online && !isStale;
 
               return (

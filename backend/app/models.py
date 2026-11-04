@@ -170,7 +170,49 @@ class MaintenanceLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     machine_id = Column(String(64), ForeignKey("machines.machine_id", ondelete="CASCADE"), index=True, nullable=False)
+    incident_id = Column(String(64), nullable=True, index=True)
     action = Column(String(128), nullable=False)
     technician = Column(String(128), default="System Operator")
     notes = Column(Text, default="")
     timestamp = Column(DateTime, default=utcnow)
+    completed_at = Column(DateTime, default=utcnow)
+
+class Incident(Base):
+    __tablename__ = "incidents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    incident_id = Column(String(64), unique=True, index=True, nullable=False)
+    machine_id = Column(String(64), ForeignKey("machines.machine_id", ondelete="CASCADE"), index=True, nullable=False)
+    machine_name = Column(String(128), nullable=False)
+    telemetry_id = Column(Integer, ForeignKey("sensor_readings.id", ondelete="SET NULL"), nullable=True, index=True)
+    prediction_id = Column(Integer, ForeignKey("predictions.id", ondelete="SET NULL"), nullable=True, index=True)
+    alert_id = Column(Integer, ForeignKey("alerts.id", ondelete="SET NULL"), nullable=True, index=True)
+    condition_type = Column(String(64), nullable=False)
+    severity = Column(String(32), default="CRITICAL") # CRITICAL, WARNING
+    status = Column(String(32), default="Open", index=True) # Open, Acknowledged, Under Maintenance, Verification Pending, Resolved, Not Fixed
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    triggering_values = Column(Text, default="{}") # JSON snapshot of triggering values
+    failure_probability = Column(Float, nullable=True)
+    anomaly_score = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=utcnow, index=True, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    acknowledged_at = Column(DateTime, nullable=True)
+    acknowledged_by = Column(String(128), nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+
+class IncidentVerification(Base):
+    __tablename__ = "incident_verifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    incident_id = Column(String(64), index=True, nullable=False)
+    machine_id = Column(String(64), ForeignKey("machines.machine_id", ondelete="CASCADE"), index=True, nullable=False)
+    maintenance_log_id = Column(Integer, ForeignKey("maintenance_logs.id", ondelete="SET NULL"), nullable=True)
+    status = Column(String(32), nullable=False) # RESOLVED, NOT FIXED, IN_PROGRESS
+    consecutive_healthy_count = Column(Integer, default=0)
+    required_healthy_count = Column(Integer, default=3)
+    verification_timestamp = Column(DateTime, default=utcnow, index=True, nullable=False)
+    evidence = Column(Text, default="")
+    supporting_telemetry_ids = Column(Text, default="[]") # JSON array of telemetry IDs
+    evaluated_predictions = Column(Text, default="{}") # JSON snapshot of evaluated predictions
+    notes = Column(Text, default="")

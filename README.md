@@ -5,36 +5,61 @@
 
 ---
 
-## 1. System Architecture & Critical Separation of Concerns
+## 1. Final Decoupled Architecture & Separation of Concerns
 
-The platform strictly enforces decoupled operational architecture:
+The platform strictly enforces a modern, decoupled edge-to-cloud architecture:
 
 ```
-[ External Sensor Generator ] (data_generator.py)
-         │  HTTP POST /api/telemetry (every 2-3s)
-         ▼
-[ Ingestion API & Prediction Engine ] (FastAPI + Scikit-Learn)
-         │  • Validates telemetry payload against Pydantic schema
-         │  • Applies exact preprocessing & feature engineering
-         │  • Executes Random Forest failure probability classifier
-         │  • Diagnoses physical failure modes (HDF, PWF, OSF, TWF)
-         │  • Triggers alerts if risk >= 60% (with duplicate cooldown)
-         ▼
-[ SQLite Database ] (Machines, Telemetry, Predictions, Alerts)
-         ▲
-         │  REST API & Live Polling (3s)
-         ▼
-[ Industrial Web Dashboard ] (React + Vite + Recharts)
-         • Fleet status & risk distribution overview
-         • Dedicated machine monitoring & telemetry trend charts
-         • Real-time failure alerts triage (Acknowledge / Resolve)
-         • Lightweight model status indicator
+[ Local Workstation / Laptop ]
+┌─────────────────────────────────┐
+│ data_generator.py               │
+│ (Discovers registered assets,   │
+│  streams telemetry @ 1.0s)      │
+└───────────────┬─────────────────┘
+                │ HTTP POST /api/telemetry (http://localhost:8000)
+                ▼
+┌─────────────────────────────────┐
+│ Local FastAPI Backend           │
+│ • Validates telemetry payload   │
+│ • Runs 3 ML Models locally:     │
+│   - Failure Classifier (AI4I RF)│
+│   - Anomaly Detector (AI4I IF)  │
+│   - RUL Regressor (RUL RF)      │
+│ • Incident & Alert Engine       │
+│ • Maintenance Recovery Engine   │
+└───────────────┬─────────────────┘
+                │ Direct PostgreSQL Pooler Connection
+                │ (or local SQLite offline buffer during outages)
+                ▼
+[ Cloud: Supabase Database ]
+┌────────────────────────────────────────────────────────┐
+│ PostgreSQL 17 + Realtime Engine                        │
+│ • Tables: machines, sensor_readings, predictions,       │
+│   alerts, incidents, maintenance_logs, verifications   │
+│ • Row Level Security (RLS) Active                      │
+│ • Realtime Publications Active on all 7 tables         │
+└───────────────┬────────────────────────────────────────┘
+                │ Direct Supabase Client + Realtime Subscriptions
+                │ (Using safe publishable anon key)
+                ▼
+[ Cloud: Vercel Production Hosting ]
+┌────────────────────────────────────────────────────────┐
+│ React 19 + Vite Industrial SCADA Dashboard             │
+│ • 1. Dashboard: Fleet health, stale badges, alerts     │
+│ • 2. Machines: Machinery fleet, variant & filter cards │
+│ • 3. Alerts & Incidents: Critical incident management  │
+│ • 4. Maintenance History: Audit ledger & verification  │
+│ • 5. System Status: Latency, DB & ML model diagnostics │
+│ • Functions 24/7 even when local laptop is turned off  │
+└────────────────────────────────────────────────────────┘
 ```
 
-### Critical Separation:
-1. **Model Training & Evaluation**: All dataset acquisition, feature engineering, model training, evaluation, and model comparisons take place **outside the website** via terminal scripts in `ml/`. The website has **no training buttons, dataset browser, or retraining controls**.
+### Critical Architectural Guarantees:
+1. **Model Training & Evaluation**: All dataset acquisition, feature engineering, model training, evaluation, and comparisons take place **outside the website** via terminal scripts in `ml/`. The website has **no fake training buttons, synthetic dataset generator, or retraining controls**.
 2. **Sensor Data Origin**: The website **never produces or fabricates its own sensor readings**. All incoming telemetry arrives via HTTP POST requests from the independent standalone `data_generator.py` program.
-3. **Inference Only**: The FastAPI backend loads the serialized model and preprocessing pipeline artifacts from `ml/models/` for real-time inference when telemetry is ingested.
+3. **Local Inference Only**: The FastAPI backend loads serialized model and preprocessing pipeline artifacts from `ml/models/` for real-time local inference. No ML models or FastAPI servers are hosted on Render or Vercel.
+4. **Cloud Persistence & Realtime**: Telemetry and prediction outputs are stored in Supabase PostgreSQL and broadcast instantly to the Vercel dashboard via Supabase Realtime.
+5. **24/7 Resilience & Stale Detection**: When the local computer is closed or offline, the Vercel dashboard continues serving persisted records and displays a graceful **"System Offline / Telemetry Paused"** indicator when latest readings exceed 45 seconds.
 
 ---
 
@@ -267,33 +292,35 @@ python data_generator.py --target CNC-101 --fault osf
 6. **Observe Failure Prediction:** The Random Forest model evaluates the high torque (68+ Nm) and tool wear (220+ min), predicting a **94%+ Critical Failure Probability**.
 7. **Inspect Alerts:** An automated alarm appears in **Failure Risk Alarms & Corrective Triage** (`/alerts`) with the message:
    `"Critical failure risk (94.0%) predicted. Anomaly: Overstrain Failure (OSF). Recommended action: Immediate spindle shutdown and tool replacement."`
-8. **Triage Alarm:** Click **Acknowledge** or **Resolve** on the alert to update its state in the database.
-9. **Inspect Machine Details:** Click on `CNC-101` to view its multi-sensor trend charts (`Speed & Torque`, `Tool Wear & Temp`, `Vibration & Pressure`).
+8. **Critical Incident & Automated Maintenance Verification:**
+   - In your generator terminal, simulate an Overstrain Failure (OSF) with recovery:
+     ```powershell
+     python data_generator.py --target CNC-001 --fault osf --recover-after 5 --interval 1.0
+     ```
+   - Watch the Critical Incident banner appear and open the **Alerts & Incidents** tab (`/alerts`).
+   - Click **Record Maintenance Intervention**, enter technician notes (e.g., `Replaced worn tungsten carbide tool insert`), and submit.
+   - The status updates to `VERIFICATION_PENDING`.
+   - The engine gathers incoming telemetry. After **3 consecutive nominal cycles**, the system automatically verifies recovery, setting status to `RESOLVED` and creating an entry in the **Maintenance History** ledger.
 
 ---
 
 ## 7. Verification & Automated Test Results
 
-Run the automated backend test suite:
+Run the complete multi-suite automated test suite:
 ```powershell
-python -m backend.test_api
+pytest -p no:xdist
 ```
 
-Results: **10 passed, 0 failed**
-- `test_health_endpoint`: Passed
-- `test_model_status_endpoint`: Passed
-- `test_machine_lifecycle`: Passed
-- `test_telemetry_ingestion_valid`: Passed
-- `test_telemetry_missing_features_handles_gracefully`: Passed
-- `test_machine_specific_telemetry`: Passed
-- `test_machine_predictions`: Passed
-- `test_dashboard_summary`: Passed
-- `test_fault_telemetry_triggers_alert`: Passed
-- `test_alert_lifecycle`: Passed
+Results: **40 passed, 0 failed** across all test suites:
+- `backend/test_api.py`: 11 passed
+- `backend/test_consistency_and_alerts.py`: 9 passed
+- `backend/test_incident_and_verification.py`: 4 passed
+- `backend/test_supabase_integration.py`: 7 passed
+- `ml/tests/test_ml_models.py`: 9 passed
 
 Frontend production build:
 ```powershell
 cd frontend
 npm run build
 ```
-Result: **Exit code 0** (2518 modules transformed, cleanly packaged with Vite).
+Result: **Exit code 0** (2564 modules transformed, cleanly packaged with Vite in ~1.0s).

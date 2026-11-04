@@ -8,7 +8,9 @@ import Dashboard from './pages/Dashboard';
 import Machines from './pages/Machines';
 import MachineDetail from './pages/MachineDetail';
 import Alerts from './pages/Alerts';
+import MaintenanceHistory from './pages/MaintenanceHistory';
 import SystemStatus from './pages/SystemStatus';
+import { supabase } from './supabaseClient';
 
 import {
   fetchDashboardSummary,
@@ -97,6 +99,37 @@ export default function App() {
     const interval = setInterval(loadData, 2000);
     return () => clearInterval(interval);
   }, [loadData, activeTab]);
+
+  // Supabase Realtime live subscription for instant updates on all tables
+  useEffect(() => {
+    if (!supabase) return;
+
+    const channel = supabase
+      .channel('machineguard-realtime-all')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sensor_readings' }, () => {
+        loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'predictions' }, () => {
+        loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'alerts' }, () => {
+        loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, () => {
+        loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'maintenance_logs' }, () => {
+        loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'incident_verifications' }, () => {
+        loadData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadData]);
 
   // Navigation handlers
   const handleSelectMachine = (machineId) => {
@@ -187,6 +220,11 @@ export default function App() {
           title: 'Incident Alerts & Alarm Center',
           subtitle: 'Operational rule violations, ML failure alerts, and anomaly records',
         };
+      case 'maintenance-history':
+        return {
+          title: 'Maintenance History & Recovery Verification',
+          subtitle: 'Audit trail of corrective interventions, engineer actions, and automated recovery tests',
+        };
       case 'system-status':
         return {
           title: 'System Infrastructure & Service Status',
@@ -228,7 +266,7 @@ export default function App() {
         }}
       />
 
-      {/* Primary Sidebar Navigation (Strictly 4 Primary Tabs) */}
+      {/* Primary Sidebar Navigation (5 Primary Tabs) */}
       <Sidebar
         activeTab={activeTab === 'machine-detail' ? 'machines' : activeTab}
         setActiveTab={(tab) => {
@@ -236,6 +274,7 @@ export default function App() {
           setActiveTab(tab);
         }}
         activeAlertsCount={summary?.active_alerts_count || 0}
+        activeIncidentsCount={(summary?.recent_incidents || []).filter(i => i.status !== 'RESOLVED').length}
         backendOnline={backendOnline}
       />
 
@@ -286,6 +325,10 @@ export default function App() {
             <Alerts
               onSelectMachine={handleSelectMachine}
             />
+          )}
+
+          {activeTab === 'maintenance-history' && (
+            <MaintenanceHistory />
           )}
 
           {activeTab === 'system-status' && (

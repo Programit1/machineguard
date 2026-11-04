@@ -106,9 +106,10 @@ class IndustrialMachineSimulator:
         print(f"\n >>> [FAULT INJECTED] Machine {self.machine_id} -> Mode: {self.fault_mode.upper()} (Severity: {self.fault_severity:.2f})")
 
     def clear_fault(self):
-        print(f"\n >>> [FAULT CLEARED] Machine {self.machine_id} -> Restored to nominal state.")
+        print(f"\n >>> [FAULT CLEARED / MAINTENANCE REPAIR SIMULATED] Machine {self.machine_id} -> Restored to nominal healthy baseline.")
         self.fault_mode = None
         self.fault_severity = 0.0
+        self.tool_wear_min = random.uniform(15.0, 35.0) # Reset tool contact wear after tool insert replacement
 
     def step(self, accelerate_wear: bool = False) -> Dict[str, Any]:
         """Calculates next physics-consistent reading adhering to AI4I and plant condition dynamics."""
@@ -223,6 +224,7 @@ def main():
     parser.add_argument("--fault", choices=["none", "hdf", "pwf", "osf", "twf", "bearing", "pressure", "random"], default="none", help="Fault mode to inject")
     parser.add_argument("--target", type=str, default="", help="Specific machine ID to inject fault into (default: first machine or all)")
     parser.add_argument("--deteriorate", action="store_true", help="Enable accelerated wear progression")
+    parser.add_argument("--recover-after", type=int, default=0, help="Automatically clear fault after N cycles to simulate maintenance repair and verify recovery")
     parser.add_argument("--count", type=int, default=0, help="Number of telemetry cycles to emit (0 = continuous loop)")
     parser.add_argument("--list", action="store_true", help="List registered machines from backend and exit")
 
@@ -317,6 +319,13 @@ def main():
                             ))
                     # Retain only machines currently active in the database
                     simulators = [s for s in simulators if s.machine_id in fresh_mids]
+
+            # Automated recovery simulation after configured cycles
+            if args.recover_after > 0 and cycles == (args.recover_after + 1):
+                print(f"\n[MAINTENANCE TRIGGER] Simulating maintenance completion after {args.recover_after} cycles. Restoring nominal machine states...")
+                for sim in simulators:
+                    if sim.fault_mode:
+                        sim.clear_fault()
 
             for sim in simulators:
                 payload = sim.step(accelerate_wear=args.deteriorate)

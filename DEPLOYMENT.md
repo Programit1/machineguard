@@ -81,7 +81,15 @@ python run.py
 
 ### Terminal 2: Standalone Telemetry Generator
 ```powershell
+# Standard continuous multi-machine stream (1.0s interval)
 python data_generator.py --api http://localhost:8000/api --interval 1.0
+
+# Critical Incident Simulation: Inject Overstrain Failure (OSF)
+python data_generator.py --target CNC-001 --fault osf --interval 1.0
+
+# Automated Maintenance Recovery Simulation:
+# Injects fault for 5 cycles, then automatically resets tool wear & torque to nominal
+python data_generator.py --target CNC-001 --fault osf --recover-after 5 --interval 1.0
 ```
 
 ### Terminal 3: Local Frontend (Optional for local testing)
@@ -92,9 +100,53 @@ npm run dev
 
 ---
 
-## 4. Laptop Independence & Offline Behavior
+## 4. Critical Incident Notification & Maintenance Verification Workflow
+
+The system provides an audit-grade maintenance lifecycle:
+
+1. **Incident Triggering:**
+   - Any physical failure mode (OSF, TWF, PWF, HDF) or High/Critical ML failure risk automatically creates a **Critical Incident** in the `incidents` table (with duplicate cooldown deduplication).
+   - High-severity visual banners and audio-style toasts alert plant operators immediately.
+
+2. **Operator Triage:**
+   - Operator acknowledges the incident (`ACKNOWLEDGED`), transitions to `UNDER_MAINTENANCE`, and inspects equipment.
+   - When physical repair (e.g. tool insert replacement, cooling fluid flush) is done, the engineer records the maintenance intervention:
+     - Component replaced (e.g. `Spindle Tool Insert C4-Carbide`).
+     - Action type (`TOOL_REPLACEMENT`, `LUBRICATION_FLUSH`, `CALIBRATION`).
+     - Technician name and notes.
+   - The incident status transitions to **`VERIFICATION_PENDING`**.
+
+3. **Automated Verification Engine:**
+   - The backend `IncidentManager` monitors incoming telemetry for the specific machine.
+   - It requires **3 consecutive nominal telemetry cycles** where tool wear, torque, speed, and temperatures remain strictly within safe operational thresholds.
+   - If 3 nominal cycles are confirmed:
+     - Incident transitions to **`RESOLVED`** with verified timestamp and telemetry evidence log in `incident_verifications`.
+     - Linked critical alerts are automatically resolved.
+   - If abnormal conditions persist or re-occur:
+     - Incident transitions to **`NOT_FIXED`**.
+     - An alarm is raised alerting the plant supervisor that maintenance was unsuccessful.
+
+---
+
+## 5. Laptop Independence & Offline Behavior
 When your laptop is turned off:
 1. All past telemetry, machine records, predictions, alerts, and maintenance logs remain fully preserved and queryable on the Vercel dashboard.
 2. The Vercel dashboard detects that latest telemetry exceeds `OFFLINE_THRESHOLD_SECONDS` and displays a graceful **"System Offline / Telemetry Paused"** badge.
 3. No fabricated or phantom sensor readings will be displayed.
 4. When you turn your laptop back on and start the backend/generator, live streaming and ML predictions resume immediately with no duplicates.
+
+---
+
+## 6. Vercel Deployment Instructions
+
+1. Push your repository to GitHub: `https://github.com/Programit1/machineguard`.
+2. In your Vercel Dashboard, click **Add New Project** and select `machineguard`.
+3. Configure Project Settings:
+   - **Framework Preset:** Vite
+   - **Root Directory:** `frontend`
+   - **Build Command:** `npm run build`
+   - **Output Directory:** `dist`
+4. Environment Variables:
+   - `VITE_SUPABASE_URL`: `https://jojwttixovrtmgfysbde.supabase.co`
+   - `VITE_SUPABASE_ANON_KEY`: `[Your Supabase Publishable Anon Key]`
+5. Click **Deploy**. Vercel will build and serve your industrial monitoring portal globally 24/7.

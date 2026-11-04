@@ -8,12 +8,13 @@ from typing import List, Optional, Tuple, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 
-from .models import Machine, SensorReading, Prediction, Alert, MaintenanceLog, utcnow
-from .schemas import MachineCreate, MachineUpdate, TelemetryCreate
+from .models import Machine, SensorReading, Prediction, Alert, MaintenanceLog, Incident, IncidentVerification, utcnow
+from .schemas import MachineCreate, MachineUpdate, TelemetryCreate, MaintenanceCreate
 from .ml_service import ml_engine
 from .config import ALERT_RISK_THRESHOLD, OFFLINE_THRESHOLD_SECONDS, ANOMALY_ALERT_SCORE_THRESHOLD
 from .health_service import health_service
 from .alert_manager import alert_manager, AlertManager
+from .incident_manager import IncidentManager
 
 # Cooldown window in seconds before repeating an active alert for the same condition on a machine
 ALERT_COOLDOWN_SECONDS = 300
@@ -187,6 +188,14 @@ def save_telemetry_and_predict(db: Session, telemetry_in: TelemetryCreate) -> Tu
         mech_W = float(torque) * (float(rot_speed) * 2.0 * 3.14159 / 60.0)
         pwr = round(mech_W / 1000.0, 2)
 
+    # 0. Check and flush any queued offline items if cloud connectivity is restored
+    try:
+        from .offline_queue import has_pending_items, flush_pending_queue_to_supabase
+        if has_pending_items():
+            flush_pending_queue_to_supabase(db)
+    except Exception:
+        pass
+
     # 1. Save Sensor Reading
     reading = SensorReading(
         machine_id=machine.machine_id,
@@ -297,11 +306,20 @@ def save_telemetry_and_predict(db: Session, telemetry_in: TelemetryCreate) -> Tu
     prediction.model_disagreement = 1 if final_disag else 0
     prediction.disagreement_reason = final_reason
 
+    # 5. Synchronize Critical Incidents & Automated Maintenance Verification
+    created_incidents, verifs = IncidentManager.sync_incidents_and_verification(
+        db=db,
+        machine=machine,
+        reading=reading,
+        prediction=prediction,
+        pred_result=pred_result,
+        alerts_created=created_alerts,
+        violations=op_violations
+    )
+
     db.commit()
 
     primary_created_alert = created_alerts[0] if created_alerts else None
-    return reading, prediction, primary_created_alert
-
     return reading, prediction, primary_created_alert
 
 def get_machine_telemetry(db: Session, machine_id: str, limit: int = 100) -> List[SensorReading]:
@@ -531,3 +549,82 @@ def get_dashboard_summary(db: Session) -> Dict[str, Any]:
         "recent_alerts": recent_alerts,
         "recent_telemetry": recent_telemetry
     }
+
+# --- Incident Management & Verification CRUD ---
+def get_incidents(db: Session, status: Optional[str] = None, machine_id: Optional[str] = None, limit: int = 100) -> List[Incident]:
+    query = db.query(Incident)
+    if status and status.lower() != "all":
+        query = query.filter(func.lower(Incident.status) == status.lower())
+    if machine_id:
+        query = query.filter(Incident.machine_id == machine_id.strip().upper())
+    return query.order_by(Incident.created_at.desc(), Incident.id.desc()).limit(limit).all()
+
+def get_incident(db: Session, incident_id: str) -> Optional[Incident]:
+    return db.query(Incident).filter(Incident.incident_id == incident_id).first()
+
+def update_incident_status(db: Session, incident_id: str, new_status: str, operator_name: str = "Operator") -> Optional[Incident]:
+    inc = get_incident(db, incident_id)
+    if not inc:
+        return None
+    inc.status = new_status
+    inc.updated_at = utcnow()
+    if new_status.lower() == "acknowledged":
+        inc.acknowledged_at = utcnow()
+        inc.acknowledged_by = operator_name
+    elif new_status.lower() == "resolved":
+        inc.resolved_at = utcnow()
+    db.commit()
+    db.refresh(inc)
+    return inc
+
+def record_maintenance(db: Session, m_in: MaintenanceCreate) -> MaintenanceLog:
+    now_ts = utcnow()
+    log = MaintenanceLog(
+        machine_id=m_in.machine_id.strip().upper(),
+        incident_id=m_in.incident_id,
+        action=m_in.action.strip(),
+        technician=m_in.technician.strip() if m_in.technician else "System Operator",
+        notes=m_in.notes or "",
+        timestamp=now_ts,
+        completed_at=now_ts
+    )
+    db.add(log)
+    
+    # If linked to an incident, automatically transition the incident to "Verification Pending"
+    if m_in.incident_id:
+        inc = get_incident(db, m_in.incident_id)
+        if inc:
+            inc.status = "Verification Pending"
+            inc.updated_at = now_ts
+            
+            # Initialize or reset a verification session
+            verif = IncidentVerification(
+                incident_id=inc.incident_id,
+                machine_id=inc.machine_id,
+                status="IN_PROGRESS",
+                consecutive_healthy_count=0,
+                required_healthy_count=IncidentManager.REQUIRED_HEALTHY_CYCLES,
+                verification_timestamp=now_ts,
+                evidence=f"Maintenance logged by {log.technician}: '{log.action}'. Awaiting {IncidentManager.REQUIRED_HEALTHY_CYCLES} consecutive nominal telemetry cycles.",
+                supporting_telemetry_ids="[]",
+                evaluated_predictions="{}",
+                notes=log.notes or ""
+            )
+            db.add(verif)
+            
+    db.commit()
+    db.refresh(log)
+    return log
+
+def get_maintenance_history(db: Session, machine_id: Optional[str] = None, limit: int = 100) -> List[MaintenanceLog]:
+    query = db.query(MaintenanceLog)
+    if machine_id:
+        query = query.filter(MaintenanceLog.machine_id == machine_id.strip().upper())
+    return query.order_by(MaintenanceLog.timestamp.desc(), MaintenanceLog.id.desc()).limit(limit).all()
+
+def get_verifications_for_incident(db: Session, incident_id: str) -> List[IncidentVerification]:
+    return db.query(IncidentVerification)\
+        .filter(IncidentVerification.incident_id == incident_id)\
+        .order_by(IncidentVerification.verification_timestamp.desc(), IncidentVerification.id.desc())\
+        .all()
+
