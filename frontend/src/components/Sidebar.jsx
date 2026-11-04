@@ -9,7 +9,14 @@ import {
   Radio,
 } from 'lucide-react';
 
-export default function Sidebar({ activeTab, setActiveTab, activeAlertsCount = 0, backendOnline = true, activeIncidentsCount = 0 }) {
+export default function Sidebar({
+  activeTab,
+  setActiveTab,
+  activeAlertsCount = 0,
+  backendOnline = true,
+  cloudOnline = true,
+  activeIncidentsCount = 0,
+}) {
   const totalBadges = activeAlertsCount + activeIncidentsCount;
   const navItems = [
     {
@@ -103,14 +110,16 @@ export default function Sidebar({ activeTab, setActiveTab, activeAlertsCount = 0
           <div className="flex items-center gap-2">
             <span
               className={`h-2 w-2 rounded-full ${
-                backendOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
+                cloudOnline || backendOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
               }`}
             />
             <span className="font-medium text-slate-700">
-              {backendOnline ? 'System Online' : 'System Offline'}
+              {cloudOnline ? 'Cloud DB Online' : backendOnline ? 'Local Engine Online' : 'System Offline'}
             </span>
           </div>
-          <span className="font-mono text-[10px] text-slate-500">1.0s Feed</span>
+          <span className="font-mono text-[10px] text-slate-500">
+            {backendOnline ? '1.0s Feed' : 'Saved State'}
+          </span>
         </div>
       </div>
     </aside>

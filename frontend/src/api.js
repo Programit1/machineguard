@@ -1,6 +1,11 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
-const rawBase = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+const defaultLocalUrl = 'http://localhost:8000/api';
+const rawBase = (
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app') ? defaultLocalUrl : '/api')
+).replace(/\/$/, '');
 export const API_BASE = rawBase.startsWith('http') && !rawBase.endsWith('/api') ? `${rawBase}/api` : rawBase;
 
 // -----------------------------------------------------------------------------
@@ -598,19 +603,64 @@ export async function fetchVerifications(incidentId) {
 // -----------------------------------------------------------------------------
 
 export async function checkBackendHealth() {
+  let localBackend = { status: 'down' };
   try {
-    const res = await fetch(`${API_BASE}/health`);
-    if (res.ok) return await res.json();
-    return { status: 'down' };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1200);
+    const res = await fetch(`${API_BASE}/health`, { signal: controller.signal });
+    clearTimeout(timer);
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      localBackend = await res.json();
+    }
   } catch {
-    return { status: 'down' };
+    localBackend = { status: 'down' };
   }
+
+  // Ping Supabase Cloud directly from browser
+  let supabaseConnected = false;
+  let supabasePingMs = null;
+  let supabaseRowCount = 0;
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const t0 = performance.now();
+      const { count, error } = await supabase
+        .from('machines')
+        .select('*', { count: 'exact', head: true });
+      if (!error) {
+        supabaseConnected = true;
+        supabasePingMs = Math.max(1, Math.round(performance.now() - t0));
+        supabaseRowCount = count || 0;
+      }
+    } catch (err) {
+      console.warn('Supabase ping check error:', err);
+    }
+  }
+
+  const isHealthy = localBackend.status === 'healthy' || supabaseConnected;
+
+  return {
+    ...localBackend,
+    backendOnline: localBackend.status === 'healthy',
+    supabaseConnected,
+    supabasePingMs,
+    supabaseRowCount,
+    database_type: supabaseConnected ? 'PostgreSQL' : (localBackend.database_type || 'Unknown'),
+    database: supabaseConnected ? 'postgresql_connected' : (localBackend.database || 'offline'),
+    status: isHealthy ? 'healthy' : 'down',
+  };
 }
 
 export async function fetchModelStatus() {
   try {
-    const res = await fetch(`${API_BASE}/ml/models/status`);
-    if (res.ok) return await res.json();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1200);
+    const res = await fetch(`${API_BASE}/ml/models/status`, { signal: controller.signal });
+    clearTimeout(timer);
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      return await res.json();
+    }
     return { loaded: false };
   } catch {
     return { loaded: false };
@@ -619,9 +669,15 @@ export async function fetchModelStatus() {
 
 export async function fetchMLModelsStatus() {
   try {
-    const res = await fetch(`${API_BASE}/ml/models/status`);
-    if (res.ok) return await res.json();
-    return { error: 'Failed to fetch status' };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1200);
+    const res = await fetch(`${API_BASE}/ml/models/status`, { signal: controller.signal });
+    clearTimeout(timer);
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      return await res.json();
+    }
+    return { error: 'Local backend paused' };
   } catch (err) {
     return { error: err.message };
   }

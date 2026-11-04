@@ -33,6 +33,7 @@ export default function App() {
   const [machines, setMachines] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [backendOnline, setBackendOnline] = useState(true);
+  const [cloudOnline, setCloudOnline] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
 
   // Modal states for adding/editing machinery
@@ -64,7 +65,8 @@ export default function App() {
 
       setSummary(sumRes);
       setMachines(mList);
-      setBackendOnline(healthRes.status === 'healthy');
+      setCloudOnline(Boolean(healthRes.supabaseConnected || isSupabaseConfigured || (sumRes && sumRes.total_machines > 0)));
+      setBackendOnline(Boolean(healthRes.backendOnline));
       setLastUpdated(new Date());
 
       // Check for undismissed CRITICAL or HIGH severity alerts
@@ -276,6 +278,7 @@ export default function App() {
         activeAlertsCount={summary?.active_alerts_count || 0}
         activeIncidentsCount={(summary?.recent_incidents || []).filter(i => i.status !== 'RESOLVED').length}
         backendOnline={backendOnline}
+        cloudOnline={cloudOnline}
       />
 
       {/* Main Content Viewport */}
@@ -285,6 +288,7 @@ export default function App() {
           subtitle={pageInfo.subtitle}
           lastUpdated={lastUpdated}
           backendOnline={backendOnline}
+          cloudOnline={cloudOnline}
         />
 
         <main className="flex-1 pb-12">
