@@ -255,9 +255,9 @@ function MachineDetailContent({ machineId, initialMachine, onBack }) {
     loadData();
   }, [loadData]);
 
-  // 2-second live telemetry refresh with in-flight guard
+  // 5-second live telemetry refresh with in-flight guard
   useEffect(() => {
-    const timer = setInterval(loadData, 2000);
+    const timer = setInterval(loadData, 5000);
     return () => clearInterval(timer);
   }, [loadData]);
 
@@ -446,7 +446,7 @@ function MachineDetailContent({ machineId, initialMachine, onBack }) {
           <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
             Live Telemetry Sensor Readings
           </h2>
-          <span className="text-[11px] font-mono text-slate-400">1.0s Ingestion Frequency</span>
+          <span className="text-[11px] font-mono text-slate-400">5.0s Telemetry Cycle</span>
         </div>
 
         {latestReading ? (

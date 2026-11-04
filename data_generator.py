@@ -32,7 +32,7 @@ except ImportError:
     pass
 
 DEFAULT_API_URL = os.getenv("API_URL", "http://127.0.0.1:8000/api")
-DEFAULT_INTERVAL = float(os.getenv("INTERVAL", "1.0"))
+DEFAULT_INTERVAL = float(os.getenv("INTERVAL", "5.0"))
 
 
 class IndustrialMachineSimulator:
@@ -220,7 +220,7 @@ def main():
     )
     parser.add_argument("--api", type=str, default=DEFAULT_API_URL, help=f"Backend API URL (default: {DEFAULT_API_URL})")
     parser.add_argument("--machines", type=str, default="", help="Comma-separated machine IDs to simulate (e.g. CNC-101,PUMP-201). If omitted, queries backend.")
-    parser.add_argument("--interval", type=float, default=DEFAULT_INTERVAL, help="Transmission interval in seconds (default: 1.0)")
+    parser.add_argument("--interval", type=float, default=DEFAULT_INTERVAL, help="Transmission interval in seconds (default: 5.0)")
     parser.add_argument("--fault", choices=["none", "hdf", "pwf", "osf", "twf", "bearing", "pressure", "random"], default="none", help="Fault mode to inject")
     parser.add_argument("--target", type=str, default="", help="Specific machine ID to inject fault into (default: first machine or all)")
     parser.add_argument("--deteriorate", action="store_true", help="Enable accelerated wear progression")

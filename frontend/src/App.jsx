@@ -95,10 +95,10 @@ export default function App() {
     loadData();
   }, [loadData]);
 
-  // Live Auto-Polling: 2.0s when on overview pages (pauses during dedicated machine-detail view to free WAN bandwidth)
+  // Live Auto-Polling: 5.0s cycle
   useEffect(() => {
     if (activeTab === 'machine-detail') return;
-    const interval = setInterval(loadData, 2000);
+    const interval = setInterval(loadData, 5000);
     return () => clearInterval(interval);
   }, [loadData, activeTab]);
 
@@ -178,15 +178,18 @@ export default function App() {
       return;
     }
     try {
-      await deleteMachine(machineId);
-      showFeedback(`Machine ${machineId} deleted.`, 'info');
-      await loadData();
+      // Optimistically remove from state immediately to prevent UI glitching
+      setMachines((prev) => prev.filter((m) => m.machine_id !== machineId && m.id !== machineId));
       if (selectedMachineId === machineId) {
         setSelectedMachineId(null);
         setActiveTab('machines');
       }
+      await deleteMachine(machineId);
+      showFeedback(`Machine ${machineId} deleted successfully.`, 'info');
+      await loadData();
     } catch (err) {
       showFeedback(err.message, 'error');
+      await loadData();
     }
   };
 
@@ -275,8 +278,14 @@ export default function App() {
           setSelectedMachineId(null);
           setActiveTab(tab);
         }}
-        activeAlertsCount={summary?.active_alerts_count || 0}
-        activeIncidentsCount={(summary?.recent_incidents || []).filter(i => i.status !== 'RESOLVED').length}
+        activeAlertsCount={
+          // Calculate true unresolved items: filter case-insensitively for non-resolved incidents/alerts
+          Math.max(
+            (summary?.recent_alerts || []).filter((a) => a && String(a.status || '').toUpperCase() === 'ACTIVE').length,
+            (summary?.recent_incidents || []).filter((i) => i && String(i.status || '').toUpperCase() !== 'RESOLVED').length
+          ) || (summary?.active_alerts_count || 0)
+        }
+        activeIncidentsCount={0}
         backendOnline={backendOnline}
         cloudOnline={cloudOnline}
       />

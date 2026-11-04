@@ -69,18 +69,18 @@ export default function Dashboard({
   // Primary two monitored machine cards as specified
   const primaryMachines = machines.slice(0, 2);
 
-  // Overall Fleet Health status
-  const fleetHealth = criticalMachines > 0
-    ? { title: 'Critical Attention Required', color: 'bg-rose-50 border-rose-200 text-rose-800', desc: `${criticalMachines} machinery unit(s) report critical failure risk or active safety alarms.` }
-    : warningMachines > 0
+  // Overall Fleet Health status (only elevate to warning/critical if there are active unresolved alerts)
+  const fleetHealth = (totalActiveAlerts > 0 && criticalMachines > 0)
+    ? { title: 'Critical Attention Required', color: 'bg-rose-50 border-rose-200 text-rose-800', desc: `${criticalMachines} machinery unit(s) report active safety alarms.` }
+    : (totalActiveAlerts > 0 && warningMachines > 0)
     ? { title: 'Advisory / Maintenance Review', color: 'bg-amber-50 border-amber-200 text-amber-800', desc: `${warningMachines} unit(s) exhibit elevated risk or statistical operational anomalies.` }
     : { title: 'Nominal Fleet Condition', color: 'bg-emerald-50 border-emerald-200 text-emerald-800', desc: 'All monitored assets are operating within standard mechanical and thermal tolerances.' };
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
 
-      {/* Critical Incident Banner */}
-      {criticalMachines > 0 && (
+      {/* Critical Incident Banner (only displayed when an ACTIVE unresolved alert is open) */}
+      {totalActiveAlerts > 0 && criticalMachines > 0 && (
         <div className="rounded-xl border border-rose-300 bg-rose-50 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-rose-900">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-100 text-rose-700 border border-rose-300 shrink-0">
@@ -91,7 +91,7 @@ export default function Dashboard({
                 Critical Incident Notification ({criticalMachines} Machine{criticalMachines > 1 ? 's' : ''} in Fault State)
               </div>
               <p className="text-xs text-rose-700 mt-0.5">
-                Immediate mechanical or thermal hazard detected. Review active incidents and complete maintenance verification.
+                Active fault condition detected. Review incident log and execute corrective actions.
               </p>
             </div>
           </div>
@@ -443,7 +443,7 @@ export default function Dashboard({
                 Recent Telemetry Stream
               </h3>
             </div>
-            <span className="text-[11px] font-mono text-slate-400">1.0s Feed</span>
+            <span className="text-[11px] font-mono text-slate-400">5.0s Cycle</span>
           </div>
 
           <div className="overflow-x-auto">

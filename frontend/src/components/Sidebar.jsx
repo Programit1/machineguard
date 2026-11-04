@@ -122,7 +122,7 @@ export default function Sidebar({
             </span>
           </div>
           <span className="font-mono text-[10px] text-slate-500">
-            {backendOnline ? '1.0s Feed' : 'Saved State'}
+            {backendOnline ? '5.0s Cycle' : 'Saved State'}
           </span>
         </div>
       </div>

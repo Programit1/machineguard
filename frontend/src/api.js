@@ -331,6 +331,16 @@ export async function updateMachine(machineId, data) {
 export async function deleteMachine(machineId) {
   if (isSupabaseConfigured && supabase) {
     try {
+      // Clean up all child dependencies first to guarantee constraint-free deletion
+      await Promise.allSettled([
+        supabase.from('incident_verifications').delete().eq('machine_id', machineId),
+        supabase.from('incidents').delete().eq('machine_id', machineId),
+        supabase.from('alerts').delete().eq('machine_id', machineId),
+        supabase.from('predictions').delete().eq('machine_id', machineId),
+        supabase.from('sensor_readings').delete().eq('machine_id', machineId),
+        supabase.from('maintenance_logs').delete().eq('machine_id', machineId),
+      ]);
+
       const { error } = await supabase
         .from('machines')
         .delete()
