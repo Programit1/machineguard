@@ -43,3 +43,13 @@ dist/
 Thumbs.db
 .vscode/
 .idea/
+
+# Report diagrams, visuals, and generation scripts (local report assets only)
+system_architecture.*
+architecture_3d_render*
+system_workflow*
+generate_architecture_image.py
+generate_workflow_diagram.py
+*.png
+*.jpg
+*.jpeg
