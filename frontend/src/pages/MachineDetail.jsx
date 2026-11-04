@@ -63,6 +63,28 @@ function formatChartTime(ts) {
   }
 }
 
+function formatContributingFactors(factors) {
+  if (!factors) return null;
+  if (Array.isArray(factors)) {
+    return factors.filter(Boolean).join(' ');
+  }
+  if (typeof factors === 'string') {
+    try {
+      const parsed = JSON.parse(factors);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(Boolean).join(' ');
+      }
+      if (parsed && typeof parsed === 'object') {
+        return Object.values(parsed).filter(Boolean).join(' ');
+      }
+    } catch {
+      // not JSON, return plain string
+    }
+    return factors;
+  }
+  return String(factors);
+}
+
 const DEFAULT_FLEET_METADATA = {
   'CNC-001': { name: 'Simulated CNC Milling Machine', machine_type: 'CNC Mill', type_variant: 'M', location: 'Bay 1 - Precision Milling Cell', description: '3-axis precision milling machine instrumented with AI4I physical telemetry sensors.' },
   'CNC-101': { name: 'Vertical CNC Milling Center 1', machine_type: 'CNC Mill', type_variant: 'M', location: 'Bay A - Precision Machining Cell', description: '5-axis vertical machining center for titanium aerostructure components.' },
@@ -390,7 +412,7 @@ function MachineDetailContent({ machineId, initialMachine, onBack }) {
                     ? 'bg-rose-100 text-rose-800 border border-rose-200'
                     : healthStatus === 'Attention Required' ||
                       healthStatus === 'Warning' ||
-                      healthStatus.includes('Warning')
+                      String(healthStatus).includes('Warning')
                     ? 'bg-amber-100 text-amber-800 border border-amber-200'
                     : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                 }`}
@@ -556,9 +578,8 @@ function MachineDetailContent({ machineId, initialMachine, onBack }) {
                     : 'Nominal Operational Dynamics'}
                 </div>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  {latestPred?.contributing_factors && latestPred.contributing_factors.length > 0
-                    ? latestPred.contributing_factors.join(' ')
-                    : 'All physical sensor parameters (speed, torque, wear, temperature) remain within nominal baseline tolerances.'}
+                  {formatContributingFactors(latestPred?.contributing_factors) ||
+                    'All physical sensor parameters (speed, torque, wear, temperature) remain within nominal baseline tolerances.'}
                 </p>
                 <div className="pt-1 text-[11px] text-slate-700 font-medium">
                   <span className="font-semibold text-slate-900">Recommended action:</span>{' '}
@@ -1070,7 +1091,7 @@ function MachineDetailContent({ machineId, initialMachine, onBack }) {
                         className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
                           pHealth === 'Critical Risk' || pHealth === 'Critical'
                             ? 'bg-rose-100 text-rose-800'
-                            : pHealth.includes('Warning') || pHealth === 'Attention Required'
+                            : String(pHealth).includes('Warning') || pHealth === 'Attention Required'
                             ? 'bg-amber-100 text-amber-800'
                             : 'bg-emerald-100 text-emerald-800'
                         }`}
