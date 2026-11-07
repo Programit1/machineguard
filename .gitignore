@@ -54,3 +54,6 @@ generate_workflow_diagram.py
 *.jpg
 *.jpeg
 APPENDIX_SOURCE_CODE.txt
+
+# Unnecessary files folder (report docs, diagrams, test scripts, old databases)
+unnecessary/
